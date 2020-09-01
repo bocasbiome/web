@@ -1,0 +1,4 @@
+[submodule "public"]
+	path = public
+	url = https://github.com/bocasbiome/bocasbiome.github.io.git
+	branch = master

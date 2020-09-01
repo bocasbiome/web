@@ -1,0 +1,118 @@
+---
+title: "No 3. Subset Fish Only Samples"
+description: |
+  This script subsets the fish gut only microbiome from the rarefied data for subsequent analyses.
+author:
+#  - name: "Jarrod J Scott"
+#    url: https://github.com/jjallaire
+#    affiliation: STRI
+#    affiliation_url: https://www.rstudio.com
+bibliography: assets/cite.bib
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(phyloseq)
+library(microbiome)
+library(ggpubr)
+library(labdsv)
+require(gdata)
+library(scales)
+library(patchwork)
+library(DT)
+library(cowplot)
+library(plyr)
+library(data.table)
+library(pairwiseAdonis)
+library(ggpubr)
+library(GUniFrac)
+library(ade4)
+library(ape)
+library(vegan)
+library(hilldiv)
+library(GUniFrac) #generalized unifrac
+options(scipen=999)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+remove(list = ls())
+### This can only be used AFTER the workflow is finished.
+### Load the output to run all of the inline code, etc
+### !!! MUST CLEAR MEMORY!!!
+##ls.str(ex)
+load("rdata/p3/bocasbiome_p3.rdata")
+```
+
+In this script we subset the fish samples from the phyloseq object (with corrected `NA` taxa) created in [Script 2](wf2.html).
+
+## Subset Fish Samples
+
+First, we load the data.
+
+```{r, eval=FALSE}
+ps.slv.tree.mbio.rar.bocas <- readRDS(
+  "rdata/p2/ps_16S_bocas_rar_all_ASVID_no_NA.rds")
+```
+
+Then pull out only the fish gut samples.
+
+```{r, eval=FALSE}
+ps.slv.tree.mbio.rar.bocas.fish_all <- subset_samples(ps.slv.tree.mbio.rar.bocas,
+                                                  Fraction == "Fish")
+sample_data(ps.slv.tree.mbio.rar.bocas.fish_all)
+```
+
+```{r, echo=FALSE}
+ps.slv.tree.mbio.rar.bocas.fish_all
+```
+
+```{r, echo=FALSE}
+rapply(data.frame(sample_data(ps.slv.tree.mbio.rar.bocas.fish_all)),function(x)length(unique(x)))
+```
+## Remove Empty ASVs
+
+Check and remove empty ASVs, in other words ASVs not present in any fish gut sample.
+
+```{r}
+any(taxa_sums(ps.slv.tree.mbio.rar.bocas.fish_all) == 0)
+```
+
+```{r, eval=FALSE}
+ps.slv.tree.mbio.rar.bocas.fish <- prune_taxa(
+  taxa_sums(ps.slv.tree.mbio.rar.bocas.fish_all) > 0,
+  ps.slv.tree.mbio.rar.bocas.fish_all)
+saveRDS(ps.slv.tree.mbio.rar.bocas.fish,"rdata/p3/ps_16S_bocas_fish_final.rds")
+```
+
+```{r, echo=FALSE}
+ps.slv.tree.mbio.rar.bocas.fish
+```
+
+```{r, include=FALSE, eval=FALSE}
+save.image("rdata/p3/bocasbiome_p3.rdata")
+remove(list = ls())
+```
+
+That's the end of Script 3. The remainder of the Scripts will deal with the fish only data. In the next Script we conduct alpha diversity estimates of the fish gut microbiome.
+
+</br>
+
+<div class="post-nav">
+<div class="post-nav-item">
+<div class="meta-nav">Previous</div>
+<a href="wf2.html" rel="next">N<sup><u>o</u></sup> 2. Comparing Sample Fractions</a>
+</div>
+</div>
+
+<div class="post-nav">
+<div class="post-nav-item">
+<div class="meta-nav">Next</div>
+<a href="wf4.html" rel="prev">N<sup><u>o</u></sup> 4. Alpha Diversity Estimates</a>
+</div>
+</div>
+
+
+## Source Code {.appendix}
+
+The source code for this page can be accessed on GitHub by [clicking this link](https://github.com/bocasbiome/web/blob/master/wf3.Rmd).

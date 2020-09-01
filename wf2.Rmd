@@ -1,0 +1,619 @@
+---
+title: "No 2. Comparing Sample Fractions"
+description: |
+  In this script we look at the relative abundance of phylum & genus level diversity across sample fractions.
+author:
+#  - name: "Jarrod J Scott"
+#    url: https://github.com/jjallaire
+#    affiliation: STRI
+#    affiliation_url: https://www.rstudio.com
+bibliography: assets/cite.bib
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(phyloseq)
+library(microbiome)
+library(ggpubr)
+library(labdsv)
+require(gdata)
+library(scales)
+library(patchwork)
+library(DT)
+library(cowplot)
+library(plyr)
+library(data.table)
+library(pairwiseAdonis)
+library(ggpubr)
+library(GUniFrac)
+library(ade4)
+library(ape)
+library(vegan)
+library(hilldiv)
+library(GUniFrac)
+options(scipen=999)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+remove(list = ls())
+### This can only be used AFTER the workflow is finished.
+### Load the output to run all of the inline code, etc
+### !!! MUST CLEAR MEMORY!!!
+##ls.str(ex)
+load("rdata/p2/bocasbiome_p2_filt.rdata")
+```
+
+## Data preparation
+
+First, we load the ***rarefied*** data set containing all sample fraction (fish, water, potential prey items).
+
+```{r, eval=FALSE}
+ps.slv.tree.mbio.rar.bocas <- readRDS("rdata/p2/ps_16S_capis_bocas_all_rar.rds")
+```
+
+Inspect the data and check if there are any empty ASV columns.
+
+```{r}
+any(taxa_sums(ps.slv.tree.mbio.rar.bocas) == 0)
+```
+
+Now we make a column in taxonomy table for ASV IDs by number.
+
+```{r, eval=FALSE}
+tax_table(ps.slv.tree.mbio.rar.bocas) <-
+  cbind(
+    tax_table(ps.slv.tree.mbio.rar.bocas),
+    rownames(tax_table(ps.slv.tree.mbio.rar.bocas)))
+
+colnames(tax_table(ps.slv.tree.mbio.rar.bocas)) <-
+        c("Kingdom", "Phylum", "Class",
+          "Order", "Family", "Genus", "ASV")
+```
+
+And then change row names in tax table (ASVs) to AVS IDs for plotting. ***Note***. The ASV names in the rarefied data set will differ from the unrarefied data set because we decided to add new names *after* rarefying. That said, the ASV sequences have not changed and can be used for comparison.
+
+```{r, eval=FALSE}
+taxa_names(ps.slv.tree.mbio.rar.bocas) <- 1:ntaxa(ps.slv.tree.mbio.rar.bocas)
+taxa_names(ps.slv.tree.mbio.rar.bocas) <-
+  paste("ASV_", taxa_names(ps.slv.tree.mbio.rar.bocas),
+        sep = "")
+head(taxa_names(ps.slv.tree.mbio.rar.bocas))
+```
+
+```{r, echo=FALSE}
+head(taxa_names(ps.slv.tree.mbio.rar.bocas))
+```
+
+Next, we change row names in taxonomy table to AVS IDs for plotting purposes.
+
+```{r, eval=FALSE}
+tax.rar.bocas.all <- data.frame(tax_table(ps.slv.tree.mbio.rar.bocas))
+tax.rar.new <- data.frame(ASV_ID = row.names(tax.rar.bocas.all),
+                            tax.rar.bocas.all)
+tax.rar.new <- tax.rar.new[, c(2,3,4,5,6,7,1,8)]
+tax.rar.new2 <- as.matrix(tax.rar.new)
+
+ps.slv.tree.mbio.rar.bocas <- merge_phyloseq(
+  otu_table(ps.slv.tree.mbio.rar.bocas),
+  tax_table(tax.rar.new2),
+  sample_data(ps.slv.tree.mbio.rar.bocas),
+  phy_tree(ps.slv.tree.mbio.rar.bocas))
+
+ps.slv.tree.mbio.rar.bocas
+head(tax_table(ps.slv.tree.mbio.rar.bocas))
+saveRDS(ps.slv.tree.mbio.rar.bocas,"rdata/p2/ps_16S_bocas_rar_all_ASVID.rds")
+```
+
+
+## Barplots Filter Rare Taxa
+
+```{r, eval=FALSE, echo=FALSE}
+##ps.slv.tree.mbio.rar.bocas <- readRDS("rdata/p2/ps_16S_bocas_rar_all_ASVID.rds")
+```
+
+First we gather the data at the phylum and genus levels. To do this we agglomerate the taxonomic levels and transform read counts to relative abundance. We filter out low abundance taxa (< 5%) and sort data frame alphabetically by phylum.
+
+```{r, eval=FALSE}
+Fractions_phylum <- ps.slv.tree.mbio.rar.bocas %>%
+        tax_glom(taxrank = "Phylum") %>%
+        transform_sample_counts(function(x) {x/sum(x)} ) %>%
+        psmelt() %>%
+        filter(Abundance > 0.05) %>%
+        arrange(Phylum)
+
+Fractions_genus <- ps.slv.tree.mbio.rar.bocas %>%
+        tax_glom(taxrank = "Genus") %>%
+        transform_sample_counts(function(x) {x/sum(x)} ) %>%
+        psmelt() %>%
+        filter(Abundance > 0.05) %>%
+        arrange(Genus)
+```
+
+
+Then, we set all of the plot parameters. If you want to see all the code for plotting, please see the `.Rmd` file linked on the bottom of the page.
+
+```{r, eval=FALSE, echo=FALSE}
+level_order <- c('Fish', 'Algae', 'Coral', 'Softcoral',
+                 'Sponge','Sponge_infauna','Zoanthus',
+                 'Water')
+```
+
+```{r, eval=FALSE, echo=FALSE}
+font_theme = theme(
+        axis.title.x = element_text(size = 14),
+        axis.text.x = element_text(size = 8),
+        axis.title.y = element_text(size = 14),
+        axis.text.y = element_text(size = 8))
+```
+
+
+```{r, eval=FALSE, echo=FALSE}
+colvec.phylum <- c(
+        "seagreen2", "grey", "tomato4", "lightsalmon3", "gold4", "skyblue",
+        "papayawhip", "darksalmon", "steelblue", "burlywood3", "darkseagreen",
+        "thistle3", "powderblue", "chocolate4", "pink")
+```
+
+
+```{r, eval=FALSE, echo=FALSE}
+colvec.genus <- c(
+         "seagreen2", "lightgrey", "tomato3", "coral1", "darkolivegreen4",
+         "mistyrose", "burlywood", "lightsalmon", "snow2", "powderblue",
+         "darksalmon", "pink3", "skyblue", "lightsalmon4", "thistle3",
+         "lightsalmon3", "peachpuff3", "chocolate4", "darkmagenta", "maroon",
+         "papayawhip", "seagreen1", "deepskyblue4", "darkseagreen",
+         "mediumaquamarine", "deeppink3", "aquamarine3", "skyblue4",
+         "darkorange3", "hotpink", "yellow1", "salmon", "darkseagreen2",
+         "lightblue4", "plum1", "burlywood", "steelblue", "tomato", "seagreen2",
+         "tomato2", "lightgoldenrod3", "gold4", "thistle4", "darkolivegreen4",
+         "indianred4", "blue", "lavender", "lightskyblue", "mediumpurple3",
+         "lightgoldenrod", "goldenrod", "lightseagreen", "lightcoral",
+         "thistle3", "powderblue", "chocolate4", "pink"
+)
+```
+
+```{r, eval=FALSE, echo=FALSE}
+fig00 <-
+        ggplot(Fractions_genus, aes(x = factor(Fraction_delailed,
+                                               level = level_order),
+                                    y = Abundance, fill = Genus)) +
+        geom_bar(stat = "identity", position = "fill") +
+        scale_fill_manual(values = colvec.genus) +
+        scale_x_discrete("Sample", expand = waiver(), position = "bottom",
+                         #breaks = c("7/8", "8/4", "9/2", "10/6"),
+                         #labels = c("ALR", "CCR", "PBL", "PPR", "PST", "RNW", "ROL", "SCR", "SIS"),
+                         drop = FALSE) +
+        theme_cowplot() +
+        font_theme +
+        guides(fill = guide_legend(reverse = TRUE,
+                                   keywidth = 1, keyheight = 1)) +
+        ylab("Relative Abundance (Genus > 5%)") +
+        ggtitle("All sample fractions\nGenus") +
+        theme(panel.grid.major = element_blank(),
+              panel.grid.minor = element_blank(),
+              panel.background = element_rect(fill = "transparent", colour = NA),
+              plot.background = element_rect(fill = "transparent", colour = NA),
+              panel.border = element_rect(fill = NA, color = "black"))
+```
+
+```{r, eval=FALSE, echo=FALSE}
+fig01 <-
+        ggplot(Fractions_phylum, aes(x = factor(Fraction_delailed,
+                                                level = level_order),
+                                     y = Abundance, fill = Phylum)) +
+        geom_bar(stat = "identity", position = "fill") +
+        scale_fill_manual(values = colvec.phylum) +
+        scale_x_discrete("Fraction", expand = waiver(), position = "bottom",
+                         drop = FALSE) +
+        theme_cowplot() +
+        font_theme +
+        guides(fill = guide_legend(reverse = TRUE,
+                                   keywidth = 1, keyheight = 1)) +
+        ylab("Relative Abundance (Phylum > 5%)") +
+        ggtitle("All sample fractions\nPhylum") +
+        theme(panel.grid.major = element_blank(),
+              panel.grid.minor = element_blank(),
+              panel.background = element_rect(fill = "transparent", colour = NA),
+              plot.background = element_rect(fill = "transparent", colour = NA),
+              panel.border = element_rect(fill = NA, color = "black"))
+```
+
+```{r, eval=FALSE, echo=FALSE}
+png("figures/p2/All_Fractions_double.png", height = 14, width = 28,
+    units = 'cm', res = 600, bg = "white")
+fig <- ggarrange(fig01, fig00, ncol = 1,labels = c("A", "B"))
+fig
+dev.off()
+
+tiff("figures/p2/All_Fractions_double.tiff", height = 14, width = 28,
+     units = 'cm',compression = "lzw", res = 600, bg = 'white')
+fig
+dev.off()
+
+fig
+pdf("figures/p2/All_Fractions_double.pdf", height = 12, width = 16)
+fig
+dev.off()
+```
+
+```{r, echo=FALSE, fig.height=4, layout='l-body-outset', eval=FALSE, echo=FALSE}
+fig00_mod <- fig00
+fig01_mod <- fig01
+fig01_mod <- fig01_mod + ggtitle("All Samples Fraction", subtitle = "Phylum") +
+  theme(axis.title.x = element_text(size = 14),
+        axis.text.x = element_text(size = 8),
+        axis.title.y = element_text(size = 10),
+        axis.text.y = element_text(size = 8),
+        legend.text = element_text(size = 10),
+        plot.title = element_text(size = 12)) +
+  guides(fill = guide_legend(reverse = TRUE,
+                             keywidth = 0.6, keyheight = 0.6))
+fig00_mod <- fig00_mod + ggtitle("All Samples Fraction", subtitle = "Genus") +
+  theme(axis.title.x = element_text(size = 14),
+        axis.text.x = element_text(size = 8),
+        axis.title.y = element_text(size = 10),
+        axis.text.y = element_text(size = 8),
+        legend.text = element_text(size = 10),
+        plot.title = element_text(size = 12)) +
+  guides(fill = guide_legend(reverse = TRUE,
+                             keywidth = 0.6, keyheight = 0.6))
+```
+
+```{r, echo=FALSE, fig.height=4, layout='l-body-outset', eval=FALSE}
+ggarrange(fig01_mod, fig00_mod, ncol = 1, labels = c("A", "B"))
+```
+
+```{r, echo=FALSE, warning=FALSE, fig.height=5, layout='l-page'}
+knitr::include_graphics("figures/p2/All_Fractions_double-1.png")
+```
+
+
+```{r, include=FALSE, eval=FALSE}
+save.image("rdata/p2/bocasbiome_p2_filt.rdata")
+remove(list = ls())
+```
+
+## Barplots Rare Taxa Included
+
+```{r, include=FALSE}
+remove(list = ls())
+### This can only be used AFTER the workflow is finished.
+### Load the output to run all of the inline code, etc
+### !!! MUST CLEAR MEMORY!!!
+##ls.str(ex)
+load("rdata/p2/bocasbiome_p2_all.rdata")
+```
+
+We can also see what happens when we include rare taxa in the plots, grouped into an **Other** category.
+
+```{r, eval=FALSE}
+ps.slv.tree.mbio.rar.bocas_no_na <- readRDS("rdata/p2/ps_16S_bocas_rar_all_ASVID.rds")
+```
+
+We start by renaming all `NA` taxa by the next highest named rank. To do this we first, create a copy of the original `ps` object before renaming taxa. That way we have a copy for other analyses.
+
+```{r, eval=FALSE}
+tax.clean <- data.frame(tax_table(ps.slv.tree.mbio.rar.bocas_no_na))
+for (i in 1:6){ tax.clean[,i] <- as.character(tax.clean[,i])}
+tax.clean[is.na(tax.clean)] <- ""
+
+for (i in 1:nrow(tax.clean)){
+    if (tax.clean[i,2] == ""){
+        kingdom <- base::paste("k", tax.clean[i,1], sep = "_")
+        tax.clean[i, 2:6] <- kingdom
+    } else if (tax.clean[i,3] == ""){
+        phylum <- base::paste("p", tax.clean[i,2], sep = "_")
+        tax.clean[i, 3:6] <- phylum
+    } else if (tax.clean[i,4] == ""){
+        class <- base::paste("c", tax.clean[i,3], sep = "_")
+        tax.clean[i, 4:6] <- class
+    } else if (tax.clean[i,5] == ""){
+        order <- base::paste("o", tax.clean[i,4], sep = "_")
+        tax.clean[i, 5:6] <- order
+    } else if (tax.clean[i,6] == ""){
+        tax.clean$Genus[i] <- base::paste("f",tax.clean$Family[i], sep = "_")
+        }
+}
+rm(class, order, phylum, kingdom)
+```
+
+
+And finally, add the taxonomy table back to the phyloseq object.
+
+```{r, eval=FALSE}
+tax_table(ps.slv.tree.mbio.rar.bocas_no_na) <- as.matrix(tax.clean)
+saveRDS(ps.slv.tree.mbio.rar.bocas_no_na,
+        "rdata/p2/ps_16S_bocas_rar_all_ASVID_no_NA.rds")
+```
+
+```{r, eval=FALSE}
+rank_names(ps.slv.tree.mbio.rar.bocas_no_na)
+```
+
+***Optional*** If you want, you can choose to separate Proteobacteria into classes and then run the phylum level analysis. We do not do that here however the code is available if you wish to implement this option.
+
+```{r, eval=FALSE}
+proteo <- subset_taxa(ps.slv.tree.mbio.rar.bocas_no_na, Phylum=="Proteobacteria")
+get_taxa_unique(proteo, taxonomic.rank = rank_names(proteo)[3], errorIfNULL=TRUE)
+ps.rar.no.na.proteo <- ps.slv.tree.mbio.rar.bocas_no_na
+tax.clean2 <- data.frame(tax_table(ps.rar.no.na.proteo))
+for (i in 1:nrow(tax.clean2)){
+    if (tax.clean2[i,2] == "Proteobacteria" & tax.clean2[i,3] == "Alphaproteobacteria"){
+        phylum <- paste("Alphaproteobacteria")
+        tax.clean2[i, 2] <- phylum
+}   else if (tax.clean2[i,2] == "Proteobacteria" & tax.clean2[i,3] == "Gammaproteobacteria"){
+        phylum <- paste("Gammaproteobacteria")
+        tax.clean2[i, 2] <- phylum
+}   else if (tax.clean2[i,2] == "Proteobacteria" & tax.clean2[i,3] == "Deltaproteobacteria"){
+        phylum <- paste("Deltaproteobacteria")
+        tax.clean2[i, 2] <- phylum
+}   else if (tax.clean2[i,2] == "Proteobacteria" & tax.clean2[i,3] == "p_Proteobacteria"){
+        phylum <- paste("unc_Proteobacteria")
+        tax.clean2[i, 2] <- phylum
+   }
+}
+tax_table(ps.rar.no.na.proteo) <- as.matrix(tax.clean2)
+rank_names(ps.rar.no.na.proteo)
+rm(class, order, phylum, kingdom)
+get_taxa_unique(ps.rar.no.na.proteo,
+                taxonomic.rank = rank_names(ps.rar.no.na.proteo)[2],
+                errorIfNULL=TRUE)
+```
+
+First we choose the number of taxa to display for phylum and genus, then collapse the rest into **Other**.
+
+```{r, eval=FALSE}
+ps.rar.bocas_agg_phy <- aggregate_top_taxa(ps.slv.tree.mbio.rar.bocas_no_na,
+                                           top = 15, level = "Phylum")
+ps.rar.bocas_agg_phy
+get_taxa_unique(ps.rar.bocas_agg_phy,
+                taxonomic.rank = rank_names(ps.rar.bocas_agg_phy)[2],
+                errorIfNULL = TRUE)
+
+ps.rar.bocas_agg_gen <- aggregate_top_taxa(ps.slv.tree.mbio.rar.bocas_no_na,
+                                           top = 57, level = "Genus")
+get_taxa_unique(ps.rar.bocas_agg_gen,
+                taxonomic.rank = rank_names(ps.rar.bocas_agg_gen)[2],
+                errorIfNULL = TRUE)
+```
+
+We then select the order of the taxa to display. If you want to see all the code for ordering, please see the `.Rmd` file linked on the bottom of the page.
+
+```{r, eval=FALSE, echo=FALSE}
+phy_order <- rev(c("Verrucomicrobia",
+               "Thaumarchaeota",
+               "Tenericutes",
+               "Spirochaetes",
+               "Proteobacteria",
+               "Planctomycetes",
+               "Marinimicrobia_(SAR406_clade)",
+               "Firmicutes",
+               "Euryarchaeota",
+               "Cyanobacteria",
+               "Chloroflexi",
+               "Bacteroidetes",
+               "Actinobacteria",
+               "Acidobacteria",
+               "k_Bacteria",
+               "Other"))
+```
+
+```{r, eval=FALSE, echo=FALSE}
+gen_order <- c("Other", "k_Bacteria", "p_Proteobacteria",
+               "p_Marinimicrobia_(SAR406_clade)", "o_Thalassobaculales",
+               "o_SAR86_clade", "o_SAR324_clade(Marine_group_B)",
+               "o_Rickettsiales", "o_Marine_Group_II", "o_KI89A_clade",
+               "o_Betaproteobacteriales", "f_Xanthobacteraceae",
+               "f_SAR116_clade", "f_S25-593", "f_Ruminococcaceae",
+               "f_Rhodobacteraceae", "f_Pirellulaceae", "f_NS9_marine_group",
+               "f_Lachnospiraceae", "f_EC94", "f_Cyanobiaceae", "f_Cryomorphaceae",
+               "f_Clade_II", "f_Caldilineaceae", "f_AEGEAN-169_marine_group",
+               "f_A4b", "c_Gammaproteobacteria", "c_Alphaproteobacteria",
+               "Woeseia", "Vibrio", "Tyzzerella", "Tistlia", "Synechococcus_CC9902",
+               "Sva0996_marine_group", "Shewanella", "Ruegeria", "Romboutsia",
+               "Prosthecochloris", "OM60(NOR5)_clade", "NS5_marine_group",
+               "NS4_marine_group", "NS2b_marine_group", "Lachnospiraceae_UCG-010",
+               "JTB255_marine_benthic_group", "HIMB11", "Flavonifractor",
+               "Ferrimonas", "Epulopiscium", "Endozoicomonas", "Cyanobium_PCC-6307",
+               "Clostridium_sensu_stricto_2", "Clostridium_sensu_stricto_1",
+               "Clade_Ib", "Clade_Ia", "Catenococcus", "Candidatus_Actinomarina",
+               "Brevinema", "Anaerofilum")
+```
+
+And gather the data at the phylum and genus levels.
+
+```{r, eval=FALSE}
+Fractions_phylum <- ps.rar.bocas_agg_phy %>%
+        transform_sample_counts(function(x) {x/sum(x)} ) %>%
+        psmelt()
+Fractions_phylum$Phylum <- gdata::reorder.factor(Fractions_phylum$Phylum,
+                                                 new.order = phy_order)
+Fractions_phylum <- Fractions_phylum %>% dplyr::arrange(Phylum)
+levels(Fractions_phylum$Phylum)
+attributes(Fractions_phylum$Phylum)
+
+Fractions_genus <- ps.rar.bocas_agg_gen %>%
+        transform_sample_counts(function(x) {x/sum(x)} ) %>%
+        psmelt()
+Fractions_genus$Genus <- gdata::reorder.factor(Fractions_genus$Genus, new.order = gen_order)
+Fractions_genus <- Fractions_genus %>% dplyr::arrange(Genus)
+levels(Fractions_genus$Genus)
+attributes(Fractions_genus$Genus)
+```
+
+Then we set the themes for plotting. If you want to see all the code for plotting, please see the `.Rmd` file linked on the bottom of the page.
+
+```{r, eval=FALSE, echo=FALSE}
+level_order <- c('Fish', 'Algae', 'Coral', 'Softcoral',
+                 'Sponge','Sponge_infauna','Zoanthus', 'Water')
+font_theme = theme(
+        axis.title.x = element_text(size = 14),
+        axis.text.x = element_text(size = 8),
+        axis.title.y = element_text(size = 14),
+        axis.text.y = element_text(size = 8))
+```
+
+```{r, eval=FALSE, echo=FALSE}
+colvec.phylum <- c("#323232",
+                   "#7C7C7C",
+                   "seagreen2",
+                   "grey",
+                   "tomato4",
+                   #"lightsalmon3",
+                   "gold4",
+                   "skyblue",
+                   "papayawhip",
+                   "darksalmon",
+                   "steelblue",
+                   "burlywood3",
+                   "darkseagreen",
+                   "thistle3",
+                   "powderblue",
+                   "chocolate4",
+                   "pink")
+```
+
+
+```{r, eval=FALSE, echo=FALSE}
+colvec.genus <- c("#323232",
+         "seagreen2", "lightgrey", "tomato3", "coral1", "darkolivegreen4",
+         "mistyrose", "burlywood", "lightsalmon", "snow2", "powderblue",
+         "darksalmon", "pink3", "skyblue", "lightsalmon4", "thistle3",
+         "lightsalmon3", "peachpuff3", "chocolate4", "darkmagenta", "maroon",
+         "papayawhip", "seagreen1", "deepskyblue4", "darkseagreen",
+         "mediumaquamarine", "deeppink3", "aquamarine3", "skyblue4",
+         "darkorange3", "hotpink", "yellow1", "salmon", "darkseagreen2",
+         "lightblue4", "plum1", "burlywood", "steelblue", "tomato", "seagreen2",
+         "tomato2", "lightgoldenrod3", "gold4", "thistle4", "darkolivegreen4",
+         "indianred4", "blue", "lavender", "lightskyblue", "mediumpurple3",
+         "lightgoldenrod", "goldenrod", "lightseagreen", "lightcoral",
+         "thistle3", "powderblue", "chocolate4", "pink"
+)
+```
+
+
+```{r, eval=FALSE, echo=FALSE}
+fig01_alt <- ggplot(Fractions_phylum,
+                aes(x = factor(Fraction_delailed, level = level_order),
+                    y = Abundance, fill = Phylum)) +
+  geom_bar(stat = "identity", position = "fill") +
+  scale_fill_manual(values = colvec.phylum) +
+  scale_x_discrete("Fraction", expand = waiver(), position = "bottom", drop = FALSE) +
+  theme_cowplot() +
+  font_theme +
+  guides(fill = guide_legend(reverse = TRUE, keywidth = 1, keyheight = 1)) +
+  ylab("Relative Abundance") +
+  ggtitle("All sample fractions\nPhylum") +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_rect(fill = "transparent", colour = NA),
+        plot.background = element_rect(fill = "transparent", colour = NA),
+        panel.border = element_rect(fill = NA, color = "black"))
+fig01_alt
+dev.off()
+fig01_alt
+png("figures/p2/phyla_all.png", height = 14, width = 28, units = 'cm', res = 600, bg = "white")
+fig01_alt
+```
+
+```{r, eval=FALSE, echo=FALSE}
+fig00_alt <-
+        ggplot(Fractions_genus, aes(x = factor(Fraction_delailed,
+                                               level = level_order),
+                                    y = Abundance, fill = Genus)) +
+        geom_bar(stat = "identity", position = "fill") +
+        scale_fill_manual(values = colvec.genus) +
+        scale_x_discrete("Sample", expand = waiver(), position = "bottom",
+                         drop = FALSE) +
+        theme_cowplot() +
+        font_theme +
+        guides(fill = guide_legend(reverse = TRUE,
+                                   keywidth = 1, keyheight = 1)) +
+        ylab("Relative Abundance (Genus > 5%)") +
+        ggtitle("All sample fractions\nGenus") +
+        theme(panel.grid.major = element_blank(),
+              panel.grid.minor = element_blank(),
+              panel.background = element_rect(fill = "transparent", colour = NA),
+              plot.background = element_rect(fill = "transparent", colour = NA),
+              panel.border = element_rect(fill = NA, color = "black"))
+```
+
+
+```{r, eval=FALSE, echo=FALSE}
+png("figures/p2/All_Fractions_double_all.png", height = 14, width = 28,
+    units = 'cm', res = 600, bg = "white")
+fig_alt <- ggarrange(fig01_alt, fig00_alt, ncol = 1,labels = c("A", "B"))
+fig_alt
+dev.off()
+
+tiff("figures/p2/All_Fractions_double_all.tiff", height = 14, width = 28,
+     units = 'cm',compression = "lzw", res = 600, bg = 'white')
+fig_alt
+dev.off()
+
+fig_alt
+pdf("figures/p2/All_Fractions_double_all.pdf", height = 12, width = 16)
+fig_alt
+dev.off()
+```
+
+
+```{r, echo=FALSE, fig.height=4, layout='l-body-outset', eval=FALSE}
+fig00_mod_alt <- fig00_alt
+fig01_mod_alt <- fig01_alt
+fig01_mod_alt <- fig01_mod_alt + ggtitle("All Samples Fraction", subtitle = "Phylum") +
+  theme(axis.title.x = element_text(size = 14),
+        axis.text.x = element_text(size = 8),
+        axis.title.y = element_text(size = 10),
+        axis.text.y = element_text(size = 8),
+        legend.text = element_text(size = 10),
+        plot.title = element_text(size = 12)) +
+  guides(fill = guide_legend(reverse = FALSE,
+                             keywidth = 0.6, keyheight = 0.6))
+fig00_mod_alt <- fig00_mod_alt + ggtitle("All Samples Fraction", subtitle = "Genus") +
+  theme(axis.title.x = element_text(size = 14),
+        axis.text.x = element_text(size = 8),
+        axis.title.y = element_text(size = 10),
+        axis.text.y = element_text(size = 8),
+        legend.text = element_text(size = 10),
+        plot.title = element_text(size = 12)) +
+  guides(fill = guide_legend(reverse = FALSE,
+                             keywidth = 0.6, keyheight = 0.6))
+```
+
+```{r, echo=FALSE, fig.height=4, layout='l-body-outset', eval=FALSE}
+ggarrange(fig01_mod_alt, fig00_mod_alt, ncol = 1, labels = c("A", "B"))
+```
+
+```{r, echo=FALSE, warning=FALSE, fig.height=5, layout='l-page'}
+knitr::include_graphics("figures/p2/All_Fractions_double_all-1.png")
+```
+
+```{r, include=FALSE, eval=FALSE}
+save.image("rdata/p2/bocasbiome_p2_all.rdata")
+remove(list = ls())
+```
+
+
+That's the end of Script 2. In the next Script we subset the fish samples for downstream analysis. 
+
+</br>
+
+<div class="post-nav">
+<div class="post-nav-item">
+<div class="meta-nav">Previous</div>
+<a href="wf1.html" rel="next">N<sup><u>o</u></sup> 1. Indicator Analysis</a>
+</div>
+</div>
+
+<div class="post-nav">
+<div class="post-nav-item">
+<div class="meta-nav">Next</div>
+<a href="wf3.html" rel="prev">N<sup><u>o</u></sup> 3. Subset Fish Only Samples</a>
+</div>
+</div>
+
+
+## Source Code {.appendix}
+
+The source code for this page can be accessed on GitHub by [clicking this link](https://github.com/bocasbiome/web/blob/master/wf2.Rmd).

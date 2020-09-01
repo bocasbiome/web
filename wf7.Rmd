@@ -1,0 +1,409 @@
+---
+title: "No 7. PIME Analysis"
+description: |
+  Script to run Prevalence Interval for Microbiome Evaluation (PIME) for identifying core fish gut ASVs.
+author:
+#  - name: "Jarrod J Scott"
+#    url: https://github.com/jjallaire
+#    affiliation: STRI
+#    affiliation_url: https://www.rstudio.com
+bibliography: assets/cite.bib
+---
+
+```{r setup, include=FALSE}
+library(tidyverse) #JJS# Added
+library(phyloseq)
+library(microbiome)
+library(ggpubr)
+library(labdsv) #for indicator analysis
+require(gdata) #JJS# Added
+library(scales) #JJS# Added
+library(patchwork) #JJS# Added
+library(DT) #JJS# Added
+library(cowplot)
+library(plyr)
+library(data.table)
+library(pairwiseAdonis)
+library(ggpubr)
+library(GUniFrac)
+library(ade4)
+library(ape)
+library(vegan)
+library(hilldiv)
+library(GUniFrac)
+library(pairwiseAdonis)
+library(pime)
+library(randomForest)
+library(knitr)
+
+options(scipen=999)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r master_load, include=FALSE}
+remove(list = ls())
+### This can only be used AFTER the workflow is finished.
+### Load the output to run all of the inline code, etc
+### !!! MUST CLEAR MEMORY!!!
+##ls.str(ex)
+load("rdata/p7/bocasbiome_p7.rdata")
+```
+
+## Setup
+
+First, we grab the whole community, fish only, phyloseq object.
+
+```{r, eval=FALSE}
+ps.whole <- readRDS("rdata/p3/ps_16S_bocas_fish_final.rds")
+```
+
+```{r, eval=FALSE}
+ps.whole<- phyloseq(otu_table(ps.whole), sample_data(ps.whole), tax_table(ps.whole))
+ps.whole@phy_tree <- NULL
+```
+
+```{r, echo=FALSE}
+ps.whole
+```
+Next, we calculate the baseline noise detection
+
+```{r, eval=FALSE}
+pime.oob.error(ps.whole, "Zone")
+```
+
+And then split by Zone (i.e., Inner bay disturbed, Inner bay, & Outer bay).
+
+```{r, eval=FALSE}
+data.frame(sample_data(ps.whole))
+per_variable_obj <- pime.split.by.variable(ps.whole, "Zone")
+per_variable_obj
+```
+
+```{r, echo=FALSE}
+per_variable_obj
+```
+## Calculate the Prevalence Intervals
+
+Using the output of `pime.split.by.variable`, we calculate the prevalence intervals with the function `pime.prevalence`. This function estimates the highest prevalence possible (no empty ASV table), calculates prevalence for taxa, starting at 5 maximum prevalence possible (no empty ASV table or dropping samples). After prevalence calculation, each prevalence interval are merged.
+
+```{r, eval=FALSE}
+prevalences <- pime.prevalence(per_variable_obj)
+head(prevalences)
+```
+
+```{r, echo=FALSE}
+head(prevalences)
+```
+
+## Calculate the Best Prevalence
+
+Finally, we use the function `pime.best.prevalence` to calculate the best prevalence. The function uses randomForest to build random forests trees for samples classification and variable importance computation. It performs classifications for each prevalence interval returned by `pime.prevalence`. Variable importance is calculated, returning the Mean Decrease Accuracy (MDA), Mean Decrease Impurity (MDI), overall and by sample group, and taxonomy for each ASV. PIME keeps the top 30 variables with highest MDA each prevalence level.
+
+```{r, eval=FALSE}
+set.seed(1911)
+best.prev <- pime.best.prevalence(prevalences, "Zone")
+```
+
+```{r, echo=FALSE}
+what_is_best <- best.prev$`OOB error`
+what_is_best[, c(2:4)] <- sapply(what_is_best[, c(2:4)], as.numeric)
+what_is_best <- what_is_best %>% dplyr::rename("OOB_error_rate" = "OOB error rate (%)")
+best <- with(what_is_best, Interval[which.min(OOB_error_rate)])
+```
+
+Looks like the lowest OOB error rate (%) is `r min(what_is_best$OOB_error_rate)`% from `r best`. We will use this interval.
+
+```{r, eval=FALSE}
+imp65 <- best.prev$`Importance`$`Prevalence 65`
+write.csv(imp65, file = "tables/p7/output_PIME_Zone65.csv")
+```
+
+### Best Prevalence Summary
+
+</br>
+
+```{r, echo=FALSE, layout='l-body-outset'}
+## elementId need to be unique https://www.random.org/strings/
+imp65_mod <- imp65
+imp65_mod[, 13:17] <- list(NULL)
+imp65_mod <- imp65_mod %>% dplyr::rename("ASV_ID" = "SequenceID")
+datatable(imp65_mod, width = "100%", escape = FALSE,
+          rownames = FALSE, filter = 'top',
+          caption = htmltools::tags$caption(
+            style = 'caption-side: bottom; text-align: left;',
+            'Table: ', htmltools::em('Table of ASV from the chosen prevalence interval.')),
+          elementId = "w0vzbq4nx3jp1t81ntvw",
+          extensions = 'Buttons', options = list(
+            scrollX = TRUE,
+            dom = 'Blfrtip',
+            buttons = c('copy', 'csv', 'excel'),
+            pageLength = 5,
+            lengthMenu = list(c(5, 10, -1), c("5", "10", "All"))
+            )
+          ) %>%
+  DT::formatStyle(columns = colnames(imp65_mod), fontSize = '80%') %>%
+  DT::formatRound(columns = c("Inner.bay", "Inner.bay.disturbed",
+                              "Outer.bay", "MeanDecreaseAccuracy",
+                              "MeanDecreaseGini" ), digits = 4)
+```
+
+Now we need to create a phyloseq object of ASVs at this cutoff (`r best`).
+
+```{r, eval=FALSE}
+prevalence.65 = prevalences$`65`
+summarize_phyloseq(prevalence.65)
+saveRDS(prevalence.65, "rdata/p7/Pime_Prevalence_65.rds")
+```
+
+And look at a summary of the data.
+
+```{r, echo=FALSE}
+prevalence.65
+```
+
+```{r, echo=FALSE}
+min_read_ps <- min(readcount(prevalence.65))
+max_read_ps <- max(readcount(prevalence.65))
+total_reads_ps <- sum(readcount(prevalence.65))
+mean_reads_ps <- round(mean(readcount(prevalence.65)), digits = 0)
+median_reads_ps <- median(readcount(prevalence.65))
+total_asvs_ps <- ntaxa(prevalence.65)
+singleton_ps <- tryCatch(ntaxa(rare(prevalence.65,
+                                    detection = 1, prevalence = 0)),
+                         error=function(err) NA)
+singleton_ps_perc <- tryCatch(round((100*(ntaxa(rare(prevalence.65,
+                                                     detection = 1,
+                                                     prevalence = 0)) / ntaxa(ps))),
+                                    digits = 3),
+                              error=function(err) NA)
+sparsity_ps <- round(length(which(
+  abundances(prevalence.65) == 0))/length(abundances(prevalence.65)),
+  digits = 3)
+```
+
+| Metric                              | Results                                              |
+|-------------------------------------|------------------------------------------------------|
+| Min. number of reads                | `r min_read_ps`                                      |
+| Max. number of reads                | `r max_read_ps`                                      |
+| Total number of reads               | `r total_reads_ps`                                   |
+| Average number of reads             | `r mean_reads_ps`                                    |
+| Median number of reads              | `r median_reads_ps`                                  |
+| Median number of reads              | `r median_reads_ps`                                  |
+| Sparsity                            | `r sparsity_ps`                                      |
+| Total ASVS                          | `r total_asvs_ps`                                    |
+
+
+## Estimate Error in Prediction
+
+Using  the function `pime.error.prediction` we can estimate the error in prediction. For each prevalence interval, this function randomizes the samples labels into arbitrary groupings using `n` random permutations, defined by the user. For each, randomized and prevalence filtered, data set the OOB error rate is calculated to estimate whether the original differences in groups of samples occur by chance. Results are in a list containing a table and a boxplot summarizing the results.
+
+```{r, eval=FALSE}
+randomized <- pime.error.prediction(ps.whole, "Zone", bootstrap = 100,
+                                    parallel = TRUE, max.prev = 95)
+```
+
+<br/>
+
+```{r, echo=FALSE, eval=FALSE}
+oob_error <- randomized$`Results table`
+datatable(oob_error, width = "100%", escape = FALSE,
+          rownames = FALSE, filter = 'top',
+          caption = htmltools::tags$caption(
+            style = 'caption-side: bottom; text-align: left;',
+            'Table: ', htmltools::em('Table of ASV from the chosen prevalence interval.')),
+          elementId = "x4rm71xhgtrgjnoldisj",
+          extensions = 'Buttons', options = list(
+            scrollX = TRUE,
+            dom = 'Blfrtip',
+            buttons = c('copy', 'csv', 'excel'),
+            pageLength = 5,
+            lengthMenu = list(c(5, 10, -1), c("5", "10", "All"))
+            )
+          ) %>%
+  DT::formatStyle(columns = colnames(oob_error), fontSize = '80%') %>%
+  DT::formatRound(columns = 1:20, digits = 4)
+```
+
+```{r, echo=FALSE}
+randomized$Plot
+```
+
+It is also possible to estimate the variation of OOB error for each prevalence interval filtering. This is done by running the random forests classification for `n` times, determined by the user. The function will return a boxplot figure and a table for each classification error.
+
+```{r, eval=FALSE}
+replicated.oob.error <- pime.oob.replicate(prevalences, "Zone",
+                                         bootstrap = 100, parallel = TRUE)
+```
+
+```{r, echo=FALSE}
+replicated.oob.error$Plot
+```
+
+To obtain the confusion matrix from random forests classification use the folowing:
+
+```{r}
+best.prev$Confusion$`Prevalence 65`
+```
+
+
+```{r, eval=FALSE, echo=FALSE}
+PIME_preval.65_tax <- tax_table(prevalence.65)
+write.csv(PIME_preval.65_tax, file="tables/p7/PIME_tax_table.csv")
+
+PIME_preval.65_ASV <- otu_table(prevalence.65)
+write.csv(PIME_preval.65_ASV, file="tables/p7/PIME_otu_table.csv")
+
+PIME_preval.65_SAM <- sample_data(prevalence.65)
+write.csv(PIME_preval.65_SAM, file="tables/p7/PIME_sample_data.csv")
+```
+
+## Distribution of PIME ASVs across Samples
+
+</br>
+
+```{r, echo=FALSE, layout='l-page'}
+## elementId need to be unique https://www.random.org/strings/
+pime_asv_tab <- data.frame(PIME_preval.65_ASV)
+pime_asv_tab <- pime_asv_tab %>% tibble::rownames_to_column("Sample_ID")
+datatable(pime_asv_tab, width = "100%", escape = FALSE,
+          rownames = FALSE, filter = 'top',
+          caption = htmltools::tags$caption(
+            style = 'caption-side: bottom; text-align: left;',
+            'Table: ', htmltools::em('ASV abundance across samples.')),
+          elementId = "qbbqe2d87hjyk4w3jlyf",
+          extensions = 'Buttons', options = list(
+            scrollX = TRUE,
+            dom = 'Blfrtip',
+            buttons = c('copy', 'csv', 'excel'),
+            pageLength = 5,
+            lengthMenu = list(c(5, 25, -1), c("5", "10", "All"))
+            )
+          ) %>%
+  DT::formatStyle(columns = colnames(pime_asv_tab), fontSize = '80%')
+```
+
+```{r, eval=FALSE}
+per_zone = pime.split.by.variable(prevalence.65, "Zone")
+per_zone
+```
+
+```{r, echo=FALSE}
+per_zone
+```
+
+Finally, we can create a  stacked barchart for the PIME obtained.
+
+
+```{r, eval=FALSE}
+prevalence.65 <- readRDS("Pime_Prevalence_65.rds")
+```
+
+```{r, eval=FALSE, echo=FALSE}
+#JJ# say not run, names already fixed
+#manually modified ASV IDs in tax table for plotting
+tax.new <- read.csv("tables/p7/tax_table_PIME65.csv",
+                    row.names = 1, header = T, sep = ",")
+tax.matrix <- as.matrix(tax.new)
+#compile new phyloseq object with modified tax table
+prevalence.65.mod <- merge_phyloseq(otu_table(prevalence.65),
+                                    tax_table(tax.matrix),
+                                    sample_data(prevalence.65))
+tax_table(prevalence.65)
+```
+
+
+```{r, eval=FALSE, echo=FALSE}
+Zone_ASV <- prevalence.65 %>%
+        tax_glom(taxrank = "ASV_IDb") %>%
+        transform_sample_counts(function(x) {x/sum(x)} ) %>%
+        psmelt() %>%
+        arrange(ASV_IDb)
+level_order <- c('Outer bay', 'Inner bay', 'Inner bay disturbed')
+```
+
+
+```{r, eval=FALSE, echo=FALSE}
+ASV_colors_65 <- c(
+        "mediumaquamarine","snow2", "darkseagreen2","pink3", "lightsalmon",
+        "lightgoldenrod3","lightsalmon2","plum1","darkolivegreen1","skyblue",
+        "powderblue", "aquamarine", "darkseagreen", "lavenderblush3",
+        "mediumturquoise","seagreen", "mistyrose")
+```
+
+
+```{r, eval=FALSE, echo=FALSE}
+tiff("figures/p7/Barchart_PIME_65_ASV.tiff", height=15, width=26,
+     units='cm', compression="lzw", res=600, bg='white')
+
+```
+
+```{r, eval=FALSE, echo=FALSE}
+fig00 <-
+        ggplot(Zone_ASV, aes(x = factor(Zone, level = level_order),
+                             y = Abundance, fill = ASV_IDb)) +
+        geom_bar(stat = "identity", position = "fill") +
+        scale_fill_manual(values = ASV_colors_65) +
+        scale_x_discrete("Reef", expand = waiver(), position = "bottom",
+                         drop = FALSE) +
+        theme(axis.title.x = element_blank()) +
+        guides(fill = guide_legend(reverse = TRUE,
+                                   keywidth = 1,
+                                   keyheight = 1,
+                                   title = "ASV ID")) +
+        ylab("Relative Abundance (ASV) \n") +
+        ggtitle("PIME Filtering Zones \n 65% Prevalence") +
+        theme(panel.grid.major = element_blank(),
+              panel.grid.minor = element_blank(),
+              panel.background = element_rect(fill = "transparent", colour = NA),
+              plot.background = element_rect(fill = "white",colour = NA),
+              legend.key = element_rect(fill = "transparent", color = NA),
+              panel.border = element_rect(fill = NA, color="black"))
+fig00
+```
+
+```{r, eval=FALSE, echo=FALSE}
+invisible(dev.off())
+pdf("figures/p7/Barchart_PIME_65_ASV.pdf", width = 16, height = 10)
+fig00
+invisible(dev.off())
+```
+
+```{r, echo=FALSE, warning=FALSE, fig.height=4, layout='l-page'}
+fig00_disp <- fig00
+fig00_disp <- fig00_disp + ggtitle("PIME Filtering Zones", subtitle = "65% Prevalence") +
+  theme(axis.title.x = element_text(size = 10),
+        axis.text.x = element_text(size = 8),
+        axis.title.y = element_text(size = 10),
+        axis.text.y = element_text(size = 8),
+        legend.text = element_text(size = 8),
+        plot.title = element_text(size = 12)) +
+  guides(fill = guide_legend(reverse = FALSE,
+                             keywidth = 0.7,
+                             keyheight = 0.7,
+                             title = "ASV ID"))
+fig00_disp
+```
+
+
+```{r, eval=FALSE, echo=FALSE}
+save.image("rdata/p7/bocasbiome_p7.rdata")
+```
+
+
+That's the end of Script 7 and the entire workflow. Thanks for stopping by!
+
+</br>
+</br>
+
+<div class="post-nav">
+<div class="post-nav-item">
+<div class="meta-nav">Previous</div>
+<a href="wf6.html" rel="next">N<sup><u>o</u></sup> 6. Beta Dispersion</a>
+</div>
+</div>
+
+
+
+## Source Code {.appendix}
+
+The source code for this page can be accessed on GitHub by [clicking this link](https://github.com/bocasbiome/web/blob/master/wf6.Rmd).
