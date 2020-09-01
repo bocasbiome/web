@@ -1,0 +1,245 @@
+---
+title: "No 6. Beta Dispersion"
+description: |
+  This script generates faceted boxplot of beta dispersion for all six alpha diversity metrics from the whole & core fish gut microbiomes.
+author:
+#  - name: "Jarrod J Scott"
+#    url: https://github.com/jjallaire
+#    affiliation: STRI
+#    affiliation_url: https://www.rstudio.com
+bibliography: assets/cite.bib
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(phyloseq)
+library(microbiome)
+library(ggpubr)
+library(labdsv) #for indicator analysis
+require(gdata)
+library(scales)
+library(patchwork)
+library(DT)
+library(cowplot)
+library(plyr)
+library(data.table)
+library(pairwiseAdonis)
+library(ggpubr)
+library(GUniFrac)
+library(ade4)
+library(ape)
+library(vegan)
+library(hilldiv)
+library(GUniFrac)
+library(pairwiseAdonis)
+options(scipen=999)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r master_load, include=FALSE}
+remove(list = ls())
+### This can only be used AFTER the workflow is finished.
+### Load the output to run all of the inline code, etc
+### !!! MUST CLEAR MEMORY!!!
+##ls.str(ex)
+load("rdata/p6/bocasbiome_p6.rdata")
+```
+
+## Preparation
+
+We start by loading the beta dispersion data generated in script 5 for the [whole](wf5.html#whole-community) and [core](wf5.html#core-community) microbiomes, respectively.
+
+```{r, eval=FALSE}
+data.all <- read.csv("tables/p5/boxplot_dispersion_data_whole_jjs.csv",
+                   row.names = NULL, header = T, sep = ",")
+data.all.core <- read.csv("tables/p5/boxplot_dispersion_data_core_NEW2_jjs.csv",
+                        row.names = NULL, header = T, sep = ",")
+
+data.all$Reef <- factor(data.all$Reef, levels = c('SCR', 'PPR', 'CCR',
+                                                  'ALR', 'SIS', 'ROL',
+                                                  'RNW', 'PST','PBL'))
+data.all.core$Reef <- factor(data.all.core$Reef, levels = c('SCR', 'PPR',
+                                                            'CCR', 'ALR',
+                                                            'SIS', 'ROL',
+                                                            'RNW', 'PST',
+                                                            'PBL'))
+```
+
+Then we set some plot themes.
+
+```{r, eval=FALSE}
+level_order3 <- c('SCR', 'PPR', 'CCR', 'ALR', 'SIS', 'ROL', 'RNW', 'PST','PBL')
+level_order <- c('Outer bay', 'Inner bay', 'Inner bay disturbed')
+level_order2 <- c('Jaccard', 'Modified Gower', 'Bray Curtis', 'Unifrac',
+                  'Generalized Unifrac', 'Weighted Unifrac')
+```
+
+```{r, eval=FALSE}
+disp.pal4 <- c("royalblue4", "royalblue3", "royalblue1",
+               "aquamarine4", "mediumaquamarine", "aquamarine2",
+               "chocolate3", "chocolate2", "sienna1")
+disp.pal5 <-  c("midnightblue", "royalblue4", "royalblue3","darkslategrey",
+                "aquamarine4", "mediumaquamarine", "chocolate4", "sienna",
+                "chocolate3")
+```
+
+```{r, eval=FALSE}
+font_theme = theme(
+        axis.title.x = element_text(size = 14),
+        axis.text.x = element_text(size = 10),
+        axis.title.y = element_text(size = 14),
+        axis.text.y = element_text(size = 8))
+```
+
+## Generate Plots
+
+### Whole community
+
+```{r, eval=FALSE}
+fig4A <-
+        ggplot(data = data.all, aes(x = factor(Zone, level = level_order),
+                                    y=Distance_to_centroid))+
+        stat_boxplot(aes(colour=Reef), geom ='errorbar', alpha=1) +
+        geom_boxplot(aes(fill=Reef, colour=Reef), alpha=1,
+                     outlier.alpha = 0.7, outlier.shape = 16)+
+        scale_colour_manual(values=disp.pal5)+
+        scale_fill_manual(values=disp.pal4)+
+        ggtitle("Multivariate Dispersion", subtitle="Whole microbiome")+
+        theme(plot.title=element_text(size=18, face="bold"))+
+        theme(plot.subtitle=element_text(size=16))+
+        font_theme+
+        stat_summary(aes(fill=Reef), fun="mean", geom="point",
+                     size=2.5, shape=18,
+                     position=position_dodge(width=0.75),
+                     color=c("midnightblue", "royalblue4", "royalblue3",
+                             "darkslategrey", "aquamarine4", "mediumaquamarine",
+                             "chocolate4", "sienna", "chocolate3",
+                             "midnightblue", "royalblue4", "royalblue3",
+                             "darkslategrey", "aquamarine4", "mediumaquamarine",
+                             "chocolate4", "sienna", "chocolate3", "midnightblue",
+                             "royalblue4", "royalblue3","darkslategrey",
+                             "aquamarine4", "mediumaquamarine","chocolate4",
+                             "sienna", "chocolate3", "midnightblue", "royalblue4",
+                             "royalblue3","darkslategrey", "aquamarine4",
+                             "mediumaquamarine","chocolate4", "sienna",
+                             "chocolate3", "midnightblue", "royalblue4",
+                             "royalblue3","darkslategrey", "aquamarine4",
+                             "mediumaquamarine","chocolate4", "sienna",
+                             "chocolate3","midnightblue", "royalblue4",
+                             "royalblue3","darkslategrey", "aquamarine4",
+                             "mediumaquamarine","chocolate4", "sienna",
+                             "chocolate3"), show.legend = FALSE)+
+        scale_x_discrete(name="Zone") +
+        scale_y_continuous(name="Distance to centroid")+
+        facet_wrap(~factor(Metric, levels=unique(Metric)),
+                   scales="free",ncol = 3)+
+        theme(strip.background = element_rect(color="black", fill="white",
+                                              size=1, linetype="blank"),
+              strip.text.x = element_text(size = 14),
+              panel.border = element_rect(fill = NA, color="black"),
+              panel.grid.major = element_blank(),
+              panel.grid.minor = element_blank(),
+              panel.background = element_rect(fill = "white",colour = NA),
+              legend.key = element_rect(fill = "transparent", color = NA),
+              legend.text = element_text(size = 12),
+              legend.title = element_text(size = 14))
+
+fig4A
+```
+### Core community
+
+```{r, eval=FALSE}
+fig4B <-
+        ggplot(data = data.all.core, aes(x = factor(Zone, level = level_order),
+                                         y=Distance_to_centroid))+
+        stat_boxplot(aes(colour=Reef), geom ='errorbar', alpha=1) +
+        geom_boxplot(aes(fill=Reef, colour=Reef), alpha=1,
+                     outlier.alpha = 0.7, outlier.shape = 16)+
+        scale_colour_manual(values=disp.pal5)+
+        scale_fill_manual(values=disp.pal4)+
+        ggtitle("", subtitle="Core microbiome")+
+        theme(plot.subtitle=element_text(size=16))+
+        font_theme+
+        stat_summary(aes(fill=Reef), fun="mean", geom="point", size=2.5, shape=18,
+                     position=position_dodge(width=0.75),
+                     color=c("midnightblue", "royalblue4", "royalblue3",
+                             "darkslategrey", "aquamarine4", "mediumaquamarine",
+                             "chocolate4", "sienna", "chocolate3","midnightblue",
+                             "royalblue4", "royalblue3","darkslategrey",
+                             "aquamarine4", "mediumaquamarine","chocolate4",
+                             "sienna", "chocolate3","midnightblue", "royalblue4",
+                             "royalblue3","darkslategrey", "aquamarine4",
+                             "mediumaquamarine","chocolate4", "sienna",
+                             "chocolate3","midnightblue", "royalblue4",
+                             "royalblue3","darkslategrey", "aquamarine4",
+                             "mediumaquamarine","chocolate4", "sienna",
+                             "chocolate3", "midnightblue", "royalblue4",
+                             "royalblue3","darkslategrey", "aquamarine4",
+                             "mediumaquamarine","chocolate4", "sienna",
+                             "chocolate3", "midnightblue", "royalblue4",
+                             "royalblue3","darkslategrey", "aquamarine4",
+                             "mediumaquamarine","chocolate4", "sienna", "chocolate3"),
+                     show.legend = FALSE)+
+        scale_x_discrete(name="Zone") +
+        scale_y_continuous(name = "Distance to centroid") +
+        facet_wrap(~factor(Metric, levels=unique(Metric)),scales = "free", ncol = 3) +
+        theme(strip.background = element_rect(color="black", fill = "white",
+                                              size=1, linetype="blank"),
+              strip.text.x = element_text(size = 14),
+              panel.border = element_rect(fill = NA, color = "black"),
+              panel.grid.major = element_blank(),
+              panel.grid.minor = element_blank(),
+              panel.background = element_rect(fill = "white",colour = NA),
+              legend.key = element_rect(fill = "transparent", color = NA),
+              legend.text = element_text(size = 12),
+              legend.title = element_text(size = 14))
+fig4B
+```
+
+```{r, echo=FALSE, eval=FALSE}
+#Combine the two figures (whole and core) on 1 panel
+library(ggpubr)
+tiff("figures/p6/Boxplot_dispersion_facet_NEWNEW_v2.png", height=50, width=40, units = 'cm', res = 600, bg = "white")
+png("figures/p6/Boxplot_dispersion_facet_NEWNEW_v2.png", height=40, width=30, units = 'cm', res = 600, bg = "white")
+fig <- ggarrange(fig4A,fig4B, ncol=1, common.legend = TRUE, legend="right")
+fig
+pdf("figures/p6/Boxplot_dispersion_facet_NEWNEW_v2.pdf", height = 18, width = 12)
+fig
+dev.off()
+```
+
+## Beta Dispersion Plots Whole v Core
+
+```{r, echo=FALSE, warning=FALSE, fig.height=5, layout='l-page'}
+knitr::include_graphics("figures/p6/Boxplot_dispersion_facet_NEWNEW_v2.png")
+```
+
+
+```{r, include=FALSE, eval=FALSE}
+save.image("rdata/p6/bocasbiome_p6.rdata")
+remove(list = ls())
+```
+
+
+That's the end of Script 6. In the next Script we use PIME as an additional tool to identify the core fish gut microbiome.
+
+</br>
+
+<div class="post-nav">
+<div class="post-nav-item">
+<div class="meta-nav">Previous</div>
+<a href="wf5.html" rel="next">N<sup><u>o</u></sup> 5. Fish Gut Beta Diversity Analysis</a>
+</div>
+</div>
+
+<div class="post-nav">
+<div class="post-nav-item">
+<div class="meta-nav">Next</div>
+<a href="wf7.html" rel="prev">N<sup><u>o</u></sup> 7. PIME Analysis</a>
+</div>
+</div>
+
+
+## Source Code {.appendix}
+
+The source code for this page can be accessed on GitHub by [clicking this link](https://github.com/bocasbiome/web/blob/master/wf6.Rmd).

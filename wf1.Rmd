@@ -1,0 +1,546 @@
+---
+title: "No 1. Indicator Analysis"
+description: |
+  Script to identify the core fish gut microbiome using Indicator Analysis.
+author:
+#  - name: "Jarrod J Scott"
+#    url: https://github.com/jjallaire
+#    affiliation: STRI
+#    affiliation_url: https://www.rstudio.com
+bibliography: assets/cite.bib
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(phyloseq)
+library(microbiome)
+library(ggpubr)
+library(labdsv) #for indicator analysis
+require(gdata)
+library(scales)
+library(patchwork)
+library(DT)
+library(cowplot)
+library(plyr)
+library(data.table)
+library(pairwiseAdonis)
+library(ggpubr)
+library(GUniFrac)
+library(ade4)
+library(ape)
+library(vegan)
+library(hilldiv)
+library(GUniFrac) #generalized unifrac
+options(scipen=999)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r master_load, include=FALSE}
+remove(list = ls())
+### This can only be used AFTER the workflow is finished.
+### Load the output to run all of the inline code, etc
+### !!! MUST CLEAR MEMORY!!!
+##ls.str(ex)
+load("rdata/p1/bocasbiome_p1.rdata")
+```
+
+## Data Preparation
+
+Here, we use unrarefied data to identify the core. First, we get `ps` object containing all unrarefied sample fractions  (i.e. fish, water, & potential prey items).
+
+```{r, eval=FALSE}
+ps.slv.tree.mbio.bocas <- readRDS("rdata/p1/ps_16S_capis_bocas_all_unrar.rds")
+ps.slv.tree.mbio.bocas
+```
+
+```{r, echo=FALSE}
+ps.slv.tree.mbio.bocas
+```
+
+Here is a summary table of all samples.
+
+<br/>
+
+```{r, eval=FALSE, echo=FALSE}
+## elementId need to be unique https://www.random.org/strings/
+sample_table <- data.frame(sample_data(ps.slv.tree.mbio.bocas))
+sample_table <- sample_table %>% tibble::rownames_to_column("Sample_ID")
+sample_table$Sample <- NULL
+```
+
+<br/>
+
+```{r, echo=FALSE, layout="l-page"}
+datatable(sample_table, width = "100%", escape = FALSE,
+          rownames = FALSE, filter = 'top',
+          caption = htmltools::tags$caption(
+            style = 'caption-side: bottom; text-align: left;',
+            'Table: ', htmltools::em('Sample  summary table. Use the buttons to
+            navigate through the table or download a copy.')),
+          elementId = "nsuxann9l3fmx3yh74pu",
+          extensions = 'Buttons', options = list(
+            scrollX = TRUE,
+            dom = 'Blfrtip',
+            buttons = c('copy', 'csv', 'excel'),
+            pageLength = 5,
+            lengthMenu = list(c(5, 10, 50, -1), c("5", "10", "50", "All"))
+            )
+          ) %>%
+  DT::formatStyle(columns = colnames(sample_table), fontSize = '80%')
+```
+
+<br/>
+
+Next, we make a column in taxonomy table for ASV IDs by number. *Caution*, ASV ID numbers will differ between the core (unrarefied) and the rarefied data set.
+
+```{r, eval=FALSE}
+tax_table(ps.slv.tree.mbio.bocas) <- cbind(tax_table(ps.slv.tree.mbio.bocas),
+                                           rownames(tax_table(ps.slv.tree.mbio.bocas)))
+
+colnames(tax_table(ps.slv.tree.mbio.bocas)) <-
+        c("Kingdom", "Phylum", "Class",
+          "Order", "Family", "Genus", "ASV")
+```
+
+Next, we change row names in taxonomy table to AVS IDs for plotting purposes.
+
+```{r, eval=FALSE}
+taxa_names(ps.slv.tree.mbio.bocas) <- 1:ntaxa(ps.slv.tree.mbio.bocas)
+taxa_names(ps.slv.tree.mbio.bocas) <- paste("ASV_",
+                                            taxa_names(ps.slv.tree.mbio.bocas),
+                                            sep = "") #JJS# Changed
+```
+
+```{r, eval=FALSE}
+tax.unrar.bocas.all <- data.frame(tax_table(ps.slv.tree.mbio.bocas))
+tax.unrar.new <- data.frame(ASV_ID = row.names(tax.unrar.bocas.all),
+                            tax.unrar.bocas.all)
+tax.unrar.new <- tax.unrar.new[, c(2,3,4,5,6,7,1,8)]
+tax.unrar.new2 <- as.matrix(tax.unrar.new)
+ps.slv.tree.mbio.bocas <- merge_phyloseq(otu_table(ps.slv.tree.mbio.bocas),
+                                         tax_table(tax.unrar.new2),
+                                         sample_data(ps.slv.tree.mbio.bocas),
+                                         phy_tree(ps.slv.tree.mbio.bocas))
+saveRDS(ps.slv.tree.mbio.bocas, "rdata/p1/ps_16S_bocas_unrar_all_ASVID.rds")
+```
+
+We will also rename all `NA` taxa by the next highest named rank. To do this we first, create a copy of the original `ps` object *before* renaming taxa. That way we have a copy for other analyses.
+
+```{r, eval=FALSE}
+ps.slv.tree.mbio.bocas_o <- ps.slv.tree.mbio.bocas
+```
+
+```{r, eval=FALSE}
+tax.clean <- data.frame(tax_table(ps.slv.tree.mbio.bocas))
+for (i in 1:6){ tax.clean[,i] <- as.character(tax.clean[,i])}
+tax.clean[is.na(tax.clean)] <- ""
+
+for (i in 1:nrow(tax.clean)){
+    if (tax.clean[i,2] == ""){
+        kingdom <- base::paste("k", tax.clean[i,1], sep = "_")
+        tax.clean[i, 2:6] <- kingdom
+    } else if (tax.clean[i,3] == ""){
+        phylum <- base::paste("p", tax.clean[i,2], sep = "_")
+        tax.clean[i, 3:6] <- phylum
+    } else if (tax.clean[i,4] == ""){
+        class <- base::paste("c", tax.clean[i,3], sep = "_")
+        tax.clean[i, 4:6] <- class
+    } else if (tax.clean[i,5] == ""){
+        order <- base::paste("o", tax.clean[i,4], sep = "_")
+        tax.clean[i, 5:6] <- order
+    } else if (tax.clean[i,6] == ""){
+        tax.clean$Genus[i] <- base::paste("f",tax.clean$Family[i], sep = "_")
+        }
+}
+rm(class, order, phylum, kingdom)
+```
+
+Then, we create new ASV names that have lowest rank name attached.
+
+```{r, eval=FALSE}
+tax.clean <- tax.clean %>% unite("ASV_IDa", Genus:ASV_ID,
+                                 remove = FALSE, sep = "_")
+tax.clean <- tax.clean %>% unite("ASV_IDb", ASV_ID:Genus,
+                                 remove = FALSE, sep = "_")
+tax.clean <- tax.clean[, c(1,2,3,4,5,8,9,6,7,10)]
+tax.clean$ASV_IDa <-
+  str_replace_all(tax.clean$ASV_IDa,
+                  'Clostridium_sensu_stricto_[0-9]',
+                  'Clostridium')
+tax.clean$ASV_IDb <-
+  str_replace_all(tax.clean$ASV_IDb,
+                  'Clostridium_sensu_stricto_[0-9]',
+                  'Clostridium')
+tax.clean$ASV_IDc <- tax.clean$ASV_IDa
+tax.clean$ASV_IDc <-
+  str_replace_all(tax.clean$ASV_IDc,
+                  '_ASV', '')
+tax.clean <- tax.clean[, c(1,2,3,4,5,6,7,8,9,11,10)]
+write.csv(tax.clean, "tables/p1/tax_all_new_no_na.csv")
+```
+
+And finally, add the taxonomy table back to the phyloseq object.
+
+```{r, eval=FALSE}
+tax_table(ps.slv.tree.mbio.bocas) <- as.matrix(tax.clean)
+rank_names(ps.slv.tree.mbio.bocas)
+saveRDS(ps.slv.tree.mbio.bocas, "rdata/p1/ps_16S_bocas_unrar_all_ASVID_no_NA.rds")
+```
+
+## Run Indicator Analysis to Identify Core Taxa
+
+Now we can run the Indicator Analysis.
+
+```{r, eval=FALSE, echo=FALSE}
+##########################
+## DO NOT RUN
+##########################
+
+#JJS# Modified This code is not run
+# See next chunk
+
+##########################
+## Original Code
+##########################
+library(labdsv)
+
+## fish gut fraction versus environmental fraction
+## create a dataframe from the otu table
+data.IndVal.env.fish <- data.frame(otu_table(ps.slv.tree.mbio.bocas))
+data.IndVal.env.fish
+## inspect in excel
+write.csv(data.IndVal.env.fish, file = "tables/p1/indval_core_data_new.csv")
+## pull out data
+## check nr of taxa
+ntaxa(ps.slv.tree.mbio.bocas)
+ASV.only <- data.IndVal.env.fish[,1:10711]  #won't remove first column with sample names! Als not when do [,2:10712]
+## command above did not remove the first column containing sample names
+## remove first column manually:
+write.csv(ASV.only,file = "tables/p1/ASV_only_indval.csv")
+data.IndVal.ASV <- read.csv("tables/p1/ASV_only_indval.csv", header=TRUE)
+
+## create group data sheet for indVal in excel
+## to identify indicator species based on 'Status' (=Group) i.e. Environment=Group1, Fish=Group2
+## read in group assignment data
+data.IndVal.group <- read.csv("tables/p1/Group_env_fish_new.csv")
+```
+
+Step one is to generate an ASV table without row names.
+
+```{r, eval=FALSE}
+data.IndVal.env.fish <- data.frame(otu_table(ps.slv.tree.mbio.bocas))
+data.IndVal.env.fish
+data.IndVal.ASV <- tibble::remove_rownames(data.IndVal.env.fish)
+```
+
+And then generate an Indicator value group file.
+
+```{r, eval=FALSE}
+data.IndVal.group <- data.frame(sample_data(ps.slv.tree.mbio.bocas)) %>%
+  select(Fraction)
+data.IndVal.group$Status <- data.IndVal.group$Fraction
+data.IndVal.group <- data.IndVal.group[, c(2,1)]
+data.IndVal.group$Status <- str_replace(data.IndVal.group$Status, "Environment", "1")
+data.IndVal.group$Status <- str_replace(data.IndVal.group$Status, "Fish", "2")
+data.IndVal.group <- tibble::rownames_to_column(data.IndVal.group, "Label")
+data.IndVal.group$Status <-  as.integer(data.IndVal.group$Status)
+data.IndVal.group$Fraction <-  as.character(data.IndVal.group$Fraction)
+```
+
+Next, calculate the indicator values. We set a seed for reproducibility and saved a table of results.
+
+```{r, eval=FALSE}
+set.seed(1280)
+iva <- indval(data.IndVal.ASV, data.IndVal.group$Status)
+#Table of the significant indicator species at p= 0.01
+gr <- iva$maxcls[iva$pval <= 0.01]
+iv <- iva$indcls[iva$pval <= 0.01]
+pv <- iva$pval[iva$pval <= 0.01]
+fr <- apply(data.IndVal.ASV > 0, 2, sum)[iva$pval <= 0.01]
+indval.out <- data.frame(group = gr, indval = iv, pval = pv, freq = fr)
+indval.out <- indval.out[order(indval.out$group, -indval.out$indval),]
+indval.out
+write.csv(indval.out,
+          file = "tables/p1/IndVal_microbiome_env_fish_output_p01_new0.csv")
+```
+
+Finally, we correct p-values for repeated testing and save a new table of corrected results.
+
+```{r, eval=FALSE}
+indval.out.prob.corrected = p.adjust(indval.out$pval, "bonferroni")
+write.csv(indval.out.prob.corrected,
+          file = "tables/p1/IndVal_microbiome_env_fish_bonf_new0.csv")
+```
+
+## Fish Core Summary
+
+Now we plot the results of the **fish core** by subsetting only the ASVs that were significant for fish. First, we grab the ASVs from the phyloseq object.
+
+```{r, eval=FALSE}
+fish_ind_asvs <- indval.out[indval.out$group == 2, ]
+fish_ind_asvs_list <- row.names(fish_ind_asvs)
+ps.indv.core.01 <- subset_taxa(ps.slv.tree.mbio.bocas,
+                               rownames(tax_table(ps.slv.tree.mbio.bocas)) %in%
+                                       fish_ind_asvs_list)
+ps.indv.core.01
+```
+
+Then pull out the fish-only samples.
+
+```{r, eval=FALSE}
+ps.indv.core.fish <- subset_samples(ps.indv.core.01, Fraction == "Fish")
+sample_data(ps.indv.core.fish)
+tax.core <- tax_table(ps.indv.core.fish)
+
+write.csv(tax.core, file = "tables/p1/tax_indVal_core.csv")
+tax_core_mod <- read.csv("tables/p1/tax_indVal_core.csv", header = TRUE, row.names = 1)
+tax_core_mod2 <- as.matrix(tax_core_mod)
+```
+
+And add the modified tax table to ps object and save ps object. This contains all ASVs identified with Indicator analysis at 0.01 for fish gut samples.
+
+```{r, eval=FALSE}
+ps.indv.core.fish <- merge_phyloseq(otu_table(ps.indv.core.fish),
+                                    tax_table(tax_core_mod2),
+                                    sample_data(ps.indv.core.fish),
+                                    phy_tree(ps.indv.core.fish))
+saveRDS(ps.indv.core.fish, "rdata/p1/ps_indv01_core_fish.rds")
+ps.indv.core.fish <- readRDS("rdata/p1/ps_indv01_core_fish.rds")
+```
+
+```{r, echo=FALSE}
+ps.indv.core.fish
+```
+
+Here is a summary of the data set.
+
+```{r calculate_stats_ps, echo=FALSE, eval=FALSE}
+min_read_ps <- min(readcount(ps.indv.core.fish))
+max_read_ps <- max(readcount(ps.indv.core.fish))
+total_reads_ps <- sum(readcount(ps.indv.core.fish))
+mean_reads_ps <- round(mean(readcount(ps.indv.core.fish)), digits = 0)
+median_reads_ps <- median(readcount(ps.indv.core.fish))
+total_asvs_ps <- ntaxa(ps.indv.core.fish)
+singleton_ps <- tryCatch(ntaxa(rare(ps.indv.core.fish,
+                                    detection = 1, prevalence = 0)),
+                         error=function(err) NA)
+singleton_ps_perc <- tryCatch(round((100*(ntaxa(rare(ps.indv.core.fish,
+                                                     detection = 1,
+                                                     prevalence = 0)) / ntaxa(ps))),
+                                    digits = 3),
+                              error=function(err) NA)
+sparsity_ps <- round(length(which(
+  abundances(ps.indv.core.fish) == 0))/length(abundances(ps.indv.core.fish)),
+  digits = 3)
+```
+
+| Metric                              | Results                                              |
+|-------------------------------------|------------------------------------------------------|
+| Min. number of reads                | `r min_read_ps`                                      |
+| Max. number of reads                | `r max_read_ps`                                      |
+| Total number of reads               | `r total_reads_ps`                                   |
+| Average number of reads             | `r mean_reads_ps`                                    |
+| Median number of reads              | `r median_reads_ps`                                  |
+| Sparsity                            | `r sparsity_ps`                                      |
+| Any ASVs sum to 1 or less?          | `r isTRUE(singleton_ps >= 1)`                        |
+| Number of singleton ASVs            | `r singleton_ps`                                     |
+| Percent of ASVs that are singletons | `r singleton_ps_perc`                                |
+
+And a look at the individual ASVs.
+
+<br/>
+
+```{r, echo=FALSE, layout="l-page"}
+tax_core_mod3 <- data.frame(tax_core_mod2) %>% tibble::rownames_to_column("ID")
+indval.out1 <- data.frame(indval.out) %>% tibble::rownames_to_column("ID")
+indval_table <- dplyr::left_join(tax_core_mod3, indval.out1, by = "ID")
+indval_table[,8:13] <- list(NULL)
+datatable(indval_table, width = "100%", escape = FALSE,
+          rownames = FALSE, filter = 'top',
+          caption = htmltools::tags$caption(
+            style = 'caption-side: bottom; text-align: left;',
+            'Table: ', htmltools::em('InVal  summary table. Use the buttons to
+            navigate through the table or download a copy.')),
+          elementId = "nsuxann9l3fmx3yh74pu",
+          extensions = 'Buttons', options = list(
+            scrollX = TRUE,
+            dom = 'Blfrtip',
+            buttons = c('copy', 'csv', 'excel'),
+            pageLength = 5,
+            lengthMenu = list(c(5, 10, -1), c("5", "10", "All"))
+            )
+          ) %>%
+  DT::formatStyle(columns = colnames(indval_table), fontSize = '80%') %>%
+  DT::formatRound(columns = c("indval", "pval"), digits = 3)
+```
+
+<br/>
+
+```{r, eval=FALSE, echo=FALSE}
+#sample_data(ps.indv.core.fish)
+## manually modify tax table for plotting adding names to ASV IDs
+#tax.core <- tax_table(ps.indv.core.fish) #JJS# removed
+#write.csv(tax.core, file = "tax_indVal_core.csv") #JJS# removed
+#tax_core_mod <- read.csv("tax_indVal_core.csv", header = TRUE, row.names = 1) #JJS# removed
+#tax_core_mod2 <- as.matrix(tax_core_mod)
+#add the modified tax table to ps object
+#ps.indv.core.fish<-merge_phyloseq(otu_table(ps.indv.core.fish), tax_table(tax_core_mod2),sample_data(ps.indv.core.fish), phy_tree(ps.indv.core.fish))
+#ps.indv.core.fish
+## save ps object
+#saveRDS(ps.indv.core.fish, "rdata/p1/ps_indv01_core_fish.rds")#this contains all identified ASVs with Indicator analysis at 0.01
+#ps.indv.core.fish <- readRDS("rdata/p1/ps_indv01_core_fish.rds")
+```
+
+## Fish Core Plots
+
+First, we set all of the plot parameters
+
+```{r, eval=FALSE}
+ASV_colors <- c(
+        "mediumaquamarine","darkcyan", "darkseagreen2",
+        "springgreen4", "lightseagreen","aquamarine2",
+        "turquoise", "aquamarine","aquamarine4", "darkseagreen4",
+        "dodgerblue1","dodgerblue3", "lightsalmon3", "coral",
+        "coral2","darksalmon","lightsalmon","coral3", "salmon3" ,
+        "indianred", "indianred2","salmon2", "salmon","lightsalmon4",
+        "lavender","darkslategrey","plum3")
+
+level_order <- c('Outer bay',
+                 'Inner bay',
+                 'Inner bay disturbed')
+level_order2 <- c('SCR', 'PPR', 'CCR', 'ALR',
+                  'SIS','ROL','RNW', 'PST', 'PBL')
+asv_order <- rev(c("ASV_95", "ASV_589", "ASV_2", "ASV_25", "ASV_18",
+               "ASV_15", "ASV_14", "ASV_94", "ASV_30", "ASV_10",
+               "ASV_9", "ASV_24", "ASV_74", "ASV_19", "ASV_39",
+               "ASV_41", "ASV_27", "ASV_7", "ASV_68", "ASV_6",
+               "ASV_59", "ASV_5", "ASV_3", "ASV_17", "ASV_163",
+               "ASV_11", "ASV_1"))
+```
+
+Then we agglomerate at phylum level and transform read counts to relative abundance.
+
+```{r, eval=FALSE}
+capis.core <- ps.indv.core.fish %>%
+        tax_glom(taxrank = "ASV_IDa") %>%
+        transform_sample_counts(function(x) {x/sum(x)} ) %>%
+        psmelt() %>%
+        filter(Abundance > 0.00) %>%
+        arrange(ASV_IDa)
+capis.core$ASV_ID <- gdata::reorder.factor(capis.core$ASV_ID, new.order = asv_order)
+capis.core <- capis.core %>% dplyr::arrange(ASV_ID)
+capis.core$ASV_IDa <- factor(capis.core$ASV_IDa, levels = unique(capis.core$ASV_IDa))
+levels(capis.core$ASV_IDa)
+attributes(capis.core$ASV_IDa)
+```
+
+Plot first figure.
+
+```{r, eval=FALSE}
+fig01 <- ggplot(capis.core, aes(x = factor(Zone, level = level_order),
+                                y = Abundance, fill = ASV_IDa)) +
+        geom_bar(stat = "identity", position = "fill") +
+        scale_fill_manual(values = ASV_colors) +
+        scale_x_discrete("Zone", expand = waiver(),
+                         position = "bottom", drop = FALSE) +
+        guides(fill = guide_legend(reverse = TRUE,
+                                   keywidth = 1,
+                                   keyheight = 1,
+                                   title="ASV ID")) + #JJS# added new title
+        ylab("") +
+        ggtitle("", subtitle = "Core across zones") +
+        theme(plot.title = element_text(size = 18)) +
+        theme(plot.subtitle = element_text(size = 16)) +
+        theme_cowplot()
+```
+
+Plot second figure.
+
+```{r, eval=FALSE}
+fig02 <-
+        ggplot(capis.core, aes(x = Species, y = Abundance, fill = ASV_IDa)) +
+        geom_bar(stat = "identity", position = "fill") +
+        scale_fill_manual(values = ASV_colors) +
+        scale_x_discrete("", expand = waiver(),
+                         position = "bottom", drop = FALSE) +
+        guides(fill = guide_legend(reverse = TRUE,
+                                   keywidth = 1,
+                                   keyheight = 1,
+                                   title = "ASV ID")) + #JJS# added new title
+        ylab("Relative Abundance (ASV)") +
+        ggtitle("Fish gut core microbiome", subtitle = "") +
+        theme(plot.title = element_text(size = 18)) +
+        theme_cowplot()
+```
+
+```{r, eval=FALSE, echo=FALSE}
+## FOr Saving##
+png("figures/p1/Core_2bars.png", height = 18, width = 36,
+    units = 'cm', res = 600, bg = "white")
+fig <- ggarrange(fig02, fig01, ncol = 2, common.legend = TRUE,
+                 legend = "bottom", labels = c("A", "B"))
+fig
+dev.off()
+tiff("figures/p1/Core_2bars.tiff", height = 18, width = 36, units = 'cm',
+     compression = "lzw", res = 600, bg = 'white')
+fig
+dev.off()
+pdf("figures/p1/Core_2bars.pdf", height = 8, width = 16)
+fig
+dev.off()
+```
+
+```{r, echo=FALSE, eval=FALSE}
+fig01_mod <- fig01
+fig02_mod <- fig02
+fig01_mod <- fig01_mod + ggtitle("", subtitle = "")
+fig02_mod <- fig02_mod + ggtitle("", subtitle = "") +
+  theme(axis.text.x = element_text(face = "italic"))
+p_filt_plots <-  fig02_mod + fig01_mod
+p_filt_plots <-  p_filt_plots +
+  plot_annotation(tag_levels = 'A',
+                  title = 'Core Microbiomes',
+                  #subtitle = 'Top 40 taxa of filtered data',
+                  caption = 'A) Fish gut core microbiome,
+                  B) Core across zones') +
+  plot_layout(widths = c(1, 3), guides = "collect") &
+  theme(plot.title = element_text(size = 10),
+        plot.tag = element_text(size = 10),
+        legend.position = "bottom",
+        legend.text = element_text(size = 6),
+        legend.title = element_text(size = 8),
+        axis.text.x = element_text(size = 8),
+        axis.text.y = element_text(size = 8),
+        axis.title.x = element_text(size = 10),
+        axis.title.y = element_text(size = 10)) &
+  guides(fill = guide_legend(reverse = FALSE,
+                             keywidth = 0.4,
+                             keyheight = 0.4,
+                             title = "ASV ID", nrow = 7))
+```
+
+```{r, echo=FALSE, fig.height=5, layout='l-page'}
+p_filt_plots
+```
+
+```{r, include=FALSE, eval=FALSE}
+save.image("rdata/p1/bocasbiome_p1.rdata")
+remove(list = ls())
+```
+
+
+That's the end of Script 1. In the next Script we compare taxonomic composition across different sample fractions.
+
+</br>
+
+<div class="post-nav">
+<div class="post-nav-item">
+<div class="meta-nav">Next</div>
+<a href="wf2.html" rel="next">N<sup><u>o</u></sup> 2 Comparing Sample Fractions</a>
+</div>
+</div>
+
+
+## Source Code {.appendix}
+
+The source code for this page can be accessed on GitHub by [clicking this link](https://github.com/bocasbiome/web/blob/master/wf1.Rmd).

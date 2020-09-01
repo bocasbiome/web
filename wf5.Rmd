@@ -1,0 +1,1566 @@
+---
+title: "No 5. Beta Diversity Estimates"
+description: |
+  Script testing different distance metrics to estimate beta diversity using the whole and core fish gut communities across a range of environmental variables.
+author:
+#  - name: "Jarrod J Scott"
+#    url: https://github.com/jjallaire
+#    affiliation: STRI
+#    affiliation_url: https://www.rstudio.com
+bibliography: assets/cite.bib
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(phyloseq)
+library(microbiome)
+library(ggpubr)
+library(labdsv) #for indicator analysis
+require(gdata)
+library(scales)
+library(patchwork)
+library(DT)
+library(cowplot)
+library(plyr)
+library(data.table)
+library(pairwiseAdonis)
+library(ggpubr)
+library(GUniFrac)
+library(ade4)
+library(ape)
+library(vegan)
+library(hilldiv)
+library(GUniFrac)
+library(pairwiseAdonis)
+options(scipen=999)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r master_load, include=FALSE}
+remove(list = ls())
+### This can only be used AFTER the workflow is finished.
+### Load the output to run all of the inline code, etc
+### !!! MUST CLEAR MEMORY!!!
+##ls.str(ex)
+load("rdata/p5/bocasbiome_p5_whole.rdata")
+```
+
+```{r, eval=TRUE, include=FALSE}
+levels(sampledf$Zone)
+levels(sampledf$Position)
+levels(sampledf$Reef_type)
+levels(sampledf$Reef)
+```
+Next, we turn our attention to beta diversity estimates of fish guts. For both the **whole** community (i.e., all ASVs) and the **core** community (i.e., only core ASVs), we assess beta diversity against the following conditions:
+
+1) **Position**: `r levels(sampledf$Position)`
+2) **Zone**: `r levels(sampledf$Zone)`
+3) **Reef Type**: `r levels(sampledf$Reef_type)`
+4) **Reef**: `r levels(sampledf$Reef)`
+
+For each condition or combination of conditions, we perform the following beta diversity estimates: ***Jaccard***, ***Modified Gower***, ***Bray Curtis***, ***UNIFRAC***, ***GUNIFRAC***, ***WUNIFRAC***. For each diversity metric, we **a**) calculate a dissimilarity matrix, **b**) assess beta dispersions, **c**) run a PERMANOVA, and in some cases, **d**) look at pairwise comparisons.
+
+# Whole Community
+
+First, we load the rarefied whole fish gut microbiome data.
+
+```{r, eval=FALSE}
+ps.whole <- readRDS("rdata/p3/ps_16S_bocas_fish_final.rds")
+```
+
+## Jaccard
+
+### Dissimilarity Matrix
+
+#### All
+
+```{r, eval=FALSE}
+set.seed(1911)
+type.jaccard <- phyloseq::distance(ps.whole, method = "jaccard", binary = T)
+sampledf <- data.frame(sample_data(ps.whole))
+```
+
+#### Inner Only
+
+```{r, eval=FALSE}
+ps.whole.inner <- subset_samples(ps.whole, Zone != "Outer bay")
+type.jaccard.inner <- phyloseq::distance(ps.whole.inner,
+                                         method = "jaccard", binary = T)
+sampledf.inner <- data.frame(sample_data(ps.whole.inner))
+```
+
+### Beta Dispersions
+
+#### By Zone
+
+```{r, eval=FALSE}
+beta.jaccard1 <- betadisper(type.jaccard, sampledf$Zone,
+                            type = "centroid", bias.adjust = TRUE)
+permutest(beta.jaccard1, binary = TRUE, pairwise = TRUE,
+          permutations = 10000)
+```
+
+#### By Position
+
+```{r, eval=FALSE}
+beta.jaccard2 <- betadisper(type.jaccard, sampledf$Position,
+                            type = "centroid", bias.adjust = TRUE)
+permutest(beta.jaccard2, binary = TRUE, pairwise = TRUE,
+          permutations = 10000)
+```
+
+#### By Reef Type (inside bay)
+
+```{r, eval=FALSE}
+beta.jaccard3 <- betadisper(type.jaccard.inner, sampledf.inner$Reef_type,
+                            type = "centroid", bias.adjust = TRUE)
+permutest(beta.jaccard3, binary = TRUE, pairwise = TRUE,
+          permutations = 10000)
+```
+
+### PERMANOVA
+
+#### By Zone
+
+```{r, eval=FALSE}
+adonis.jaccard0 <- adonis(type.jaccard ~ Zone, data = sampledf,
+                          permutations = 10000)
+```
+
+#### By Reef
+
+```{r, eval=FALSE}
+adonis.jaccardR <- adonis(type.jaccard ~ Reef, data = sampledf,
+                          permutations = 10000)
+```
+
+#### By Zone nested with Reef
+
+```{r, eval=FALSE}
+adonis.jaccard1<- adonis(type.jaccard ~ Zone/Reef, data = sampledf,
+                         permutations = 10000)
+```
+
+#### By Position nested with Reef
+
+```{r, eval=FALSE}
+adonis.jaccard2 <- adonis(type.jaccard ~ Position/Reef, data = sampledf,
+                          permutations = 10000)
+```
+
+#### By Reef Type nested with Reef (inside bay)
+
+The variable reef type is healthy and disturbed (based on level coral cover).
+
+```{r, eval=FALSE}
+adonis.jaccard3 <- adonis(type.jaccard.inner ~ Reef_type/Reef,
+                          data = sampledf.inner, permutations = 10000)
+```
+
+### Pairwise comparisons
+
+#### By Zone
+
+```{r, eval=FALSE}
+pairwise1 <- pairwise.adonis(type.jaccard, factors = sampledf$Zone)
+```
+
+#### By Reef
+
+```{r, eval=FALSE}
+pairwise2 <- pairwise.adonis(type.jaccard, factors = sampledf$Reef)
+```
+
+## Modified Gower
+
+For the modified Gower, we log transform the data using the microbiome package transformation because it uses the vegan `deconstand` function. The distance matrix will be created from the log transformed data.
+
+### Dissimilarity Matrix
+
+```{r, eval=FALSE}
+set.seed(1911)
+data.log10<- microbiome::transform(ps.whole, transform = "log10p")
+sampledf.log10 <- data.frame(sample_data(data.log10))
+type.modGower <- phyloseq::distance(data.log10, method = "altGower")
+```
+
+### Beta Dispersions
+
+#### By Zone
+
+```{r, eval=FALSE}
+beta.Gower1 <- betadisper(type.modGower, sampledf.log10$Zone,
+                          type = "centroid", bias.adjust = TRUE)
+permutest(beta.Gower1, pairwise = TRUE, permutations = 10000)
+```
+
+#### By Reef
+
+```{r, eval=FALSE}
+beta.GowerR <- betadisper(type.modGower, sampledf.log10$Reef,
+                          type = "centroid", bias.adjust = TRUE)
+permutest(beta.GowerR, pairwise = TRUE, permutations = 10000)
+```
+
+#### By Position
+
+```{r, eval=FALSE}
+beta.Gower2 <- betadisper(type.modGower, sampledf.log10$Position,
+                          type = "centroid", bias.adjust = TRUE)
+permutest(beta.Gower2, pairwise = TRUE, permutations = 10000)
+```
+
+#### By Reef Type (inside bay)
+
+```{r, eval=FALSE}
+data.log10.inner <- subset_samples(data.log10, Zone != "Outer bay")
+type.modGower.inner <- phyloseq::distance(data.log10.inner, method = "altGower")
+sampledf.inner <- data.frame(sample_data(data.log10.inner))
+beta.Gower3 <- betadisper(type.modGower.inner, sampledf.inner$Reef_type,
+                          type = "centroid", bias.adjust = TRUE)
+permutest(beta.Gower3, binary = TRUE, pairwise = TRUE,
+          permutations = 10000)
+```
+
+### PERMANOVA
+
+#### By Zone
+
+```{r, eval=FALSE}
+set.seed(1911)
+adonis.modGower0 <- adonis(type.modGower ~ Zone, data = sampledf.log10,
+                           permutations = 10000)
+```
+
+#### By Reef
+
+```{r, eval=FALSE}
+adonis.modGowerR <- adonis(type.modGower ~ Reef, data = sampledf.log10,
+                           permutations = 10000)
+```
+
+#### By Zone nested with Reef
+
+```{r, eval=FALSE}
+adonis.modGower1 <- adonis(type.modGower ~ Zone/Reef, data = sampledf.log10,
+                           permutations = 10000)
+```
+
+#### By Position nested with Reef
+
+```{r, eval=FALSE}
+adonis.modGower2 <- adonis(type.modGower ~ Position/Reef, data = sampledf.log10,
+                           permutations = 10000)
+```
+
+#### By Reef Type nested with Reef (inside bay)
+
+```{r, eval=FALSE}
+data.log10.inner <- subset_samples(data.log10, Zone != "Outer bay")
+type.modGower.inner <- phyloseq::distance(data.log10.inner, method = "altGower")
+sampledf.inner.log10 <- data.frame(sample_data(data.log10.inner))
+adonis.modGower3 <- adonis(type.modGower.inner ~ Reef_type/Reef,
+                           data = sampledf.inner.log10, permutations = 10000)
+```
+
+### Pairwise comparisons
+
+#### By Zone
+
+```{r, eval=FALSE}
+set.seed(1911)
+pairwise.adonis(type.modGower, factors = sampledf$Zone)
+```
+
+#### By Reef
+
+```{r, eval=FALSE}
+set.seed(1911)
+pairwise.adonis(type.modGower, factors = sampledf$Reef)
+```
+
+## Bray Curtis
+
+### Dissimilarity Matrix
+
+```{r, eval=FALSE}
+set.seed(1911)
+type.bray <- phyloseq::distance(ps.whole, method = "bray")
+sampledf <- data.frame(sample_data(ps.whole))
+```
+
+### Beta Dispersions
+
+#### By Zone
+
+```{r, eval=FALSE}
+beta.bray1 <- betadisper(type.bray, sampledf$Zone,
+                         type = "centroid", bias.adjust = TRUE)
+permutest(beta.bray1, pairwise = TRUE, permutations = 10000)
+```
+
+#### By Reef
+
+```{r, eval=FALSE}
+beta.brayR <- betadisper(type.bray, sampledf$Reef,
+                         type = "centroid", bias.adjust = TRUE)
+permutest(beta.brayR, pairwise = TRUE, permutations = 10000)
+```
+
+#### By Position
+
+```{r, eval=FALSE}
+beta.bray2 <- betadisper(type.bray, sampledf$Position,
+                         type = "centroid", bias.adjust = TRUE)
+permutest(beta.bray2, pairwise = TRUE, permutations = 10000)
+```
+
+#### By Reef Type (inside bay)
+
+```{r, eval=FALSE}
+ps.whole.inner <- subset_samples(ps.whole, Zone != "Outer bay")
+type.bray.inner <- phyloseq::distance(ps.whole.inner, method = "bray")
+beta.bray3 <- betadisper(type.bray.inner, sampledf.inner$Reef_type,
+                         type = "centroid", bias.adjust = TRUE)
+permutest(beta.bray3, pairwise = TRUE, permutations = 10000)
+```
+
+### PERMANOVA
+
+#### By Zone
+
+```{r, eval=FALSE}
+set.seed(1911)
+adonis.bray0 <- adonis(type.bray ~ Zone, data = sampledf,
+                            permutations = 10000)
+```
+
+#### By Reef
+
+```{r, eval=FALSE}
+adonis.brayR <- adonis(type.bray ~ Reef, data = sampledf,
+                               permutations = 10000)
+```
+
+#### By Zone nested with in Reef
+
+```{r, eval=FALSE}
+adonis.bray1 <- adonis(type.bray ~ Zone/Reef, data = sampledf,
+                            permutations = 10000)
+```
+
+
+#### By Position nested with Reef
+
+```{r, eval=FALSE}
+adonis.bray2 <- adonis(type.bray ~ Position/Reef, data = sampledf,
+                            permutations = 10000)
+```
+
+#### By Reef Type nested with Reef (inside bay)
+
+```{r, eval=FALSE}
+ps.whole.inner <- subset_samples(ps.whole, Zone != "Outer bay")
+type.bray.inner <- phyloseq::distance(ps.whole.inner, method = "bray")
+sampledf.inner <- data.frame(sample_data(ps.whole.inner))
+adonis.bray3 <- adonis(type.bray.inner ~ Reef_type/Reef, data = sampledf.inner,
+                           permutations = 10000)
+```
+
+### Pairwise comparisons
+
+#### By Zone
+
+```{r, eval=FALSE}
+set.seed(1911)
+pairwise.adonis(type.bray, factors = sampledf$Zone)
+```
+
+#### By Reef
+
+```{r, eval=FALSE}
+set.seed(1911)
+pairwise.adonis(type.bray, factors = sampledf$Reef)
+```
+
+## UNIFRAC
+
+### Dissimilarity Matrix
+
+```{r, eval=FALSE}
+set.seed(1911)
+type.unifrac <- phyloseq::distance(ps.whole, method = "unifrac", weighted = F)
+sampledf <- data.frame(sample_data(ps.whole))
+```
+
+### Beta Dispersions
+
+#### By Zone
+
+```{r, eval=FALSE}
+beta.unifrac1 <- betadisper(type.unifrac, sampledf$Zone,
+                            type = "centroid", bias.adjust = TRUE)
+permutest(beta.unifrac1, pairwise = TRUE, permutations = 10000)
+```
+
+#### By Reef
+
+```{r, eval=FALSE}
+beta.unifracR <- betadisper(type.unifrac, sampledf$Reef,
+                            type = "centroid", bias.adjust = TRUE)
+permutest(beta.unifracR, pairwise = TRUE, permutations = 10000)
+```
+
+#### By Position
+
+```{r, eval=FALSE}
+beta.unifrac2 <- betadisper(type.unifrac, sampledf$Position,
+                            type = "centroid", bias.adjust = TRUE)
+permutest(beta.unifrac2, pairwise = TRUE, permutations = 10000)
+```
+
+#### By Reef Type (inside bay)
+
+```{r, eval=FALSE}
+ps.whole.inner <- subset_samples(ps.whole, Zone != "Outer bay")
+type.unifrac.inner <- phyloseq::distance(ps.whole.inner, method = "unifrac")
+sampledf.whole.inner <- data.frame(sample_data(ps.whole.inner))
+beta.unifrac3 <- betadisper(type.unifrac.inner, sampledf.whole.inner$Reef_type,
+                            type = "centroid", bias.adjust = TRUE)
+permutest(beta.unifrac3, pairwise = TRUE, permutations = 10000)
+```
+
+### PERMANOVA
+
+#### By Zone
+
+```{r, eval=FALSE}
+set.seed(1911)
+adonis.unifrac0 <- adonis(type.unifrac ~ Zone, data = sampledf,
+                               permutations = 10000)
+```
+
+#### By Reef
+
+```{r, eval=FALSE}
+adonis.unifracR <- adonis(type.unifrac ~ Reef, data = sampledf,
+                                  permutations = 10000)
+```
+
+#### By Zone nested with Reef
+
+```{r, eval=FALSE}
+adonis.unifrac1 <- adonis(type.unifrac ~ Zone/Reef, data = sampledf,
+                             permutations = 10000)
+```
+
+#### By Position nested with Reef
+
+```{r, eval=FALSE}
+adonis.unifrac2 <- adonis(type.unifrac ~ Position/Reef, data = sampledf,
+                               permutations = 10000)
+```
+
+#### By Reef Type nested with Reef (inside bay)
+
+```{r, eval=FALSE}
+ps.whole.inner <- subset_samples(ps.whole, Zone != "Outer bay")
+type.unifrac.inner <- phyloseq::distance(ps.whole.inner, method = "unifrac")
+sampledf.inner <- data.frame(sample_data(ps.whole.inner))
+
+adonis.unifrac3 <- adonis(type.unifrac.inner ~ Reef_type/Reef,
+                          data = sampledf.inner, permutations = 10000)
+```
+
+### Pairwise comparisons
+
+#### By Zone
+
+```{r, eval=FALSE}
+set.seed(1911)
+pairwise.adonis(type.unifrac, factors = sampledf$Zone)
+```
+
+#### By Reef
+
+```{r, eval=FALSE}
+set.seed(1911)
+pairwise.adonis(type.unifrac, factors = sampledf$Reef)
+```
+
+## GUNIFRAC
+
+### Dissimilarity Matrix
+
+```{r, eval=FALSE}
+asv.tab<-otu_table(ps.whole)
+ps.whole.inner <- subset_samples(ps.whole, Zone != "Outer bay")
+asv.tab.inner <- otu_table(ps.whole.inner)
+
+tree.fish<-phy_tree(ps.whole)
+tree.fish.inner<-phy_tree(ps.whole.inner)
+
+fish.sample<-sample_data(ps.whole)
+fish.sample.inner<-sample_data(ps.whole.inner)
+
+groups2.whole <- fish.sample$Zone
+groupsR.whole <- fish.sample$Reef
+groups.inner <- fish.sample.inner$Zone
+position.whole <- fish.sample$Position
+```
+
+
+```{r, eval=FALSE}
+unifracs <- GUniFrac(asv.tab, tree.fish,
+                     alpha=c(0, 0.5, 1))$unifracs
+unifracs.inner <- GUniFrac(asv.tab.inner, tree.fish.inner,
+                           alpha=c(0, 0.5, 1))$unifracs
+
+d5.all <- unifracs[, , "d_0.5"]
+d5.inner <- unifracs.inner[, , "d_0.5"]
+type.gunifrac <- as.dist(d5.all)
+type.gunifrac.inner <- as.dist(d5.inner)
+```
+
+### Beta Dispersion
+
+```{r, eval=FALSE}
+set.seed(1911)
+beta.gunifrac1 <- betadisper(as.dist(d5.all), groups2.whole,
+                             type = "centroid", bias.adjust = TRUE)
+permutest(beta.gunifrac1, pairwise = TRUE, permutations = 10000)
+```
+
+#### By Reef
+
+```{r, eval=FALSE}
+beta.gunifracR <- betadisper(as.dist(d5.all), groupsR.whole,
+                             type = "centroid", bias.adjust = TRUE)
+permutest(beta.gunifracR, pairwise = TRUE, permutations = 10000)
+```
+
+#### By Position
+
+```{r, eval=FALSE}
+beta.gunifrac2 <- betadisper(as.dist(d5.all), position.whole,
+                             type = "centroid", bias.adjust = TRUE)
+permutest(beta.gunifrac2, pairwise = TRUE, permutations = 10000)
+```
+
+#### By Reef Type (inner bay only)
+
+```{r, eval=FALSE}
+beta.gunifrac.inner <- betadisper(as.dist(d5.inner), groups.inner,
+                                  type = "centroid", bias.adjust = TRUE)
+permutest(beta.gunifrac.inner, pairwise = TRUE, permutations = 10000)
+```
+
+### PERMANOVA
+
+#### By Zone nested with Reef
+
+```{r, eval=FALSE}
+sampledf <- data.frame(sample_data(ps.whole))
+sampledf.inner <- data.frame(sample_data(ps.whole.inner))
+adonis.gunifrac1<- adonis(type.gunifrac ~ Zone/Reef, data = sampledf,
+                           permutations = 10000)
+```
+
+#### By Position nested with Reef
+
+```{r, eval=FALSE}
+adonis.gunifrac2<- adonis(type.gunifrac ~ Position/Reef, data = sampledf,
+                                    permutations = 10000)
+```
+
+#### By Reef Type nested with Reef (inside bay)
+
+```{r, eval=FALSE}
+adonis.gunifrac3<- adonis(type.gunifrac.inner ~ Reef_type/Reef,
+                          data = sampledf.whole.inner, permutations = 10000)
+```
+
+### Pairwise comparisons
+
+as a substitute for posthoc test of PERMANOVA
+
+#### By Zone
+
+```{r, eval=FALSE}
+pairwise.adonis(type.gunifrac, factors = sampledf$Zone,
+                p.adjust.m = "bonferroni")
+```
+
+#### By Reef
+
+```{r, eval=FALSE}
+pairwise.adonis(type.gunifrac, factors = sampledf$Reef,
+                p.adjust.m = "bonferroni")
+```
+
+## WUNIFRAC
+
+### Dissimilarity Matrix
+
+```{r, eval=FALSE}
+set.seed(1911)
+type.wunifrac <- phyloseq::distance(ps.whole, method = "wunifrac")
+sampledf <- data.frame(sample_data(ps.whole))
+```
+
+### Beta Dispersions
+
+#### By Zone
+
+```{r, eval=FALSE}
+beta.wunifrac1 <- betadisper(type.wunifrac, sampledf$Zone,
+                             type = "centroid", bias.adjust = TRUE)
+permutest(beta.wunifrac1, pairwise = TRUE, permutations = 10000)
+```
+
+#### By Reef
+
+```{r, eval=FALSE}
+beta.wunifracR <- betadisper(type.wunifrac, sampledf$Reef,
+                             type = "centroid", bias.adjust = TRUE)
+permutest(beta.wunifracR, pairwise = TRUE, permutations = 10000)
+```
+
+#### By Position
+
+```{r, eval=FALSE}
+beta.wunifrac2 <- betadisper(type.wunifrac, sampledf$Position,
+                             type = "centroid", bias.adjust = TRUE)
+permutest(beta.wunifrac2, pairwise = TRUE, permutations = 10000)
+```
+
+#### By Zone (inside bay only)
+
+```{r, eval=FALSE}
+ps.whole.inner <- subset_samples(ps.whole, Zone != "Outer bay")
+type.wunifrac.inner <- phyloseq::distance(ps.whole.inner, method = "wunifrac")
+sampledf.inner <- data.frame(sample_data(ps.whole.inner))
+```
+
+#### By Reef Type (inside bay)
+
+```{r, eval=FALSE}
+beta.wunifrac3 <- betadisper(type.wunifrac.inner, sampledf.inner$Reef_type,
+                             type = "centroid", bias.adjust = TRUE)
+permutest(beta.wunifrac3, pairwise = TRUE, permutations = 10000)
+```
+
+### PERMANOVA
+
+#### By Zone
+
+```{r, eval=FALSE}
+set.seed(1911)
+adonis.wunifrac0 <- adonis(type.wunifrac ~ Zone, data = sampledf,
+                                permutations = 10000)
+```
+
+#### By Reef
+
+```{r, eval=FALSE}
+adonis.wunifracR <- adonis(type.wunifrac ~ Reef, data = sampledf,
+                                permutations = 10000)
+```
+
+#### By Zone nested with Reef
+
+```{r, eval=FALSE}
+adonis.wunifrac1 <- adonis(type.wunifrac ~ Zone/Reef, data = sampledf,
+                                permutations = 10000)
+```
+
+#### By Position nested with Reef
+
+```{r, eval=FALSE}
+adonis.wunifrac2 <- adonis(type.wunifrac ~ Position/Reef, data = sampledf,
+                                permutations = 10000)
+```
+
+### Pairwise comparisons
+
+#### By Zone
+
+```{r, eval=FALSE}
+set.seed(1911)
+pairwise.adonis(type.wunifrac, factors = sampledf$Zone)
+```
+
+#### By Reef
+
+```{r, eval=FALSE}
+set.seed(1911)
+pairwise.adonis(type.wunifrac, factors = sampledf$Reef)
+```
+
+## Whole Community Summary
+
+```{r, eval=FALSE, echo=FALSE}
+df1 <- data.frame(Distance_to_centroid=beta.jaccard1$distances,
+                  Zone=beta.jaccard1$group)
+df1$Metric <- "Jaccard"
+df1 <- cbind(df1, sampledf)
+df1[, c(4:8, 10:14)] <- NULL
+df1 <- df1 %>% tibble::rownames_to_column("Sample_ID")
+
+df2 <- data.frame(Distance_to_centroid=beta.Gower1$distances,
+                  Zone = beta.Gower1$group)
+df2$Metric <- "Modified Gower"
+df2 <- cbind(df2, sampledf)
+df2[, c(4:8, 10:14)] <- NULL
+df2 <- df2 %>% tibble::rownames_to_column("Sample_ID")
+
+df3 <- data.frame(Distance_to_centroid=beta.bray1$distances,
+                  Zone = beta.bray1$group)
+df3$Metric <- "Bray Curtis"
+df3 <- cbind(df3, sampledf)
+df3[, c(4:8, 10:14)] <- NULL
+df3 <- df3 %>% tibble::rownames_to_column("Sample_ID")
+
+df4 <- data.frame(Distance_to_centroid=beta.unifrac1$distances,
+                  Zone = beta.unifrac1$group)
+df4$Metric <- "Unifrac"
+df4 <- cbind(df4, sampledf)
+df4[, c(4:8, 10:14)] <- NULL
+df4 <- df4 %>% tibble::rownames_to_column("Sample_ID")
+
+df5 <- data.frame(Distance_to_centroid=beta.gunifrac1$distances,
+                  Zone = beta.gunifrac1$group)
+df5$Metric <- "Generalized Unifrac"
+df5 <- cbind(df5, sampledf)
+df5[, c(4:8, 10:14)] <- NULL
+df5 <- df5 %>% tibble::rownames_to_column("Sample_ID")
+
+df6 <- data.frame(Distance_to_centroid=beta.wunifrac1$distances,
+                  Zone = beta.wunifrac1$group)
+df6$Metric <- "Weighted Unifrac"
+df6 <- cbind(df6, sampledf)
+df6[, c(4:8, 10:14)] <- NULL
+df6 <- df6 %>% tibble::rownames_to_column("Sample_ID")
+
+all.data <- rbind(df1,df2,df3,df4,df5,df6)
+str(all.data)
+write.csv(all.data, file = "tables/p5/boxplot_dispersion_data_whole_jjs.csv",
+          row.names = FALSE)
+```
+
+</br>
+
+```{r, echo=FALSE}
+datatable(all.data, width = "100%", escape = FALSE,
+          rownames = FALSE, filter = 'top',
+          caption = htmltools::tags$caption(
+            style = 'caption-side: bottom; text-align: left;',
+            'Table: ', htmltools::em('Beta diversity estimates of the whole fish microbiome. Use the buttons to
+            navigate through the table or download a copy.')),
+          elementId = "g2rvw71rqu9pzonn6fam",
+          extensions = 'Buttons', options = list(
+            scrollX = TRUE,
+            dom = 'Blfrtip',
+            buttons = c('copy', 'csv', 'excel'),
+            pageLength = 5,
+            lengthMenu = list(c(5, 10, 50, -1), c("5", "10", "50", "All"))
+            )
+          ) %>%
+  DT::formatStyle(columns = colnames(all.data), fontSize = '80%') %>%
+  DT::formatRound(columns = "Distance_to_centroid", digits = 4)
+```
+</br>
+
+```{r, include=FALSE, eval=FALSE}
+save.image("rdata/p5/bocasbiome_p5_whole.rdata")
+remove(list = ls())
+```
+
+# Core Community
+
+```{r master_load_core, include=FALSE}
+remove(list = ls())
+### This can only be used AFTER the workflow is finished.
+### Load the output to run all of the inline code, etc
+### !!! MUST CLEAR MEMORY!!!
+##ls.str(ex)
+load("rdata/p5/bocasbiome_p5_core.rdata")
+```
+
+
+First, we load the unrarefied core fish gut microbiome data.
+
+```{r, eval=FALSE}
+ps.core <- readRDS("rdata/p1/ps_indv01_core_fish.rds")
+ps.core
+```
+
+## Jaccard
+
+### Dissimilarity Matrix
+
+#### All
+
+```{r, eval=FALSE}
+set.seed(1911)
+type.jaccard <- phyloseq::distance(ps.core, method = "jaccard", binary = T)
+sampledf <- data.frame(sample_data(ps.core))
+```
+
+#### Inner Only
+
+```{r, eval=FALSE}
+ps.core.inner <- subset_samples(ps.core, Zone != "Outer bay")
+type.jaccard.inner <- phyloseq::distance(ps.core.inner,
+                                         method = "jaccard", binary=T)
+sampledf.inner <- data.frame(sample_data(ps.core.inner))
+```
+
+### Beta Dispersions
+
+#### By Zone
+
+```{r, eval=FALSE}
+beta.jaccard1 <- betadisper(type.jaccard, sampledf$Zone,
+                            type = "centroid", bias.adjust = TRUE)
+permutest(beta.jaccard1, binary = TRUE, pairwise = TRUE, permutations = 10000)
+```
+
+#### By Position
+
+```{r, eval=FALSE}
+beta.jaccard2 <- betadisper(type.jaccard, sampledf$Position,
+                            type = "centroid", bias.adjust = TRUE)
+permutest(beta.jaccard2,  binary = TRUE,  pairwise = TRUE, permutations = 10000)
+```
+
+#### By Reef Type (inside bay)
+
+```{r, eval=FALSE}
+beta.jaccard3 <- betadisper(type.jaccard.inner, sampledf.inner$Reef_type,
+                            type = "centroid", bias.adjust = TRUE)
+permutest(beta.jaccard3,  binary = TRUE,  pairwise = TRUE, permutations = 10000)
+```
+
+### PERMANOVA
+
+#### By Zone
+
+```{r, eval=FALSE}
+adonis.jaccard0<- adonis(type.jaccard ~ Zone, data = sampledf,
+                         permutations = 10000)
+```
+
+#### By Reef
+
+```{r, eval=FALSE}
+adonis.jaccardR<- adonis(type.jaccard ~ Reef, data = sampledf,
+                         permutations = 10000)
+```
+
+```{r, eval=FALSE}
+#by Zone with Reef nested in Zone
+adonis.jaccard1<- adonis(type.jaccard ~ Zone/Reef, data = sampledf,
+                         permutations = 10000)
+```
+
+#### By Position nested with Reef
+
+```{r, eval=FALSE}
+adonis.jaccard2 <- adonis(type.jaccard ~ Position/Reef, data = sampledf,
+                          permutations = 10000)
+```
+
+#### By Reef Type nested with Reef (inside bay)
+
+```{r, eval=FALSE}
+adonis.jaccard3 <- adonis(type.jaccard.inner ~ Reef_type/Reef,
+                          data = sampledf.inner, permutations = 10000)
+```
+
+### Pairwise comparisons
+
+#### By Zone
+
+```{r, eval=FALSE}
+set.seed(1911)
+pairwise1 <- pairwise.adonis(type.jaccard, factors = sampledf$Zone)
+```
+
+#### By Reef
+
+```{r, eval=FALSE}
+pairwise2 <- pairwise.adonis(type.jaccard, factors = sampledf$Reef)
+```
+
+
+## Modified Gower
+
+Again, for the modified Gower, we log transform the data using the microbiome package transformation because it uses the vegan `deconstand` function. The distance matrix will be created from the log transformed data.
+
+### Dissimilarity Matrix
+
+```{r, eval=FALSE}
+set.seed(1911)
+data.log10<- microbiome::transform(ps.core, transform = "log10p")
+sampledf.log10 <- data.frame(sample_data(data.log10))
+type.modGower <- phyloseq::distance(data.log10, method = "altGower")
+```
+
+### Beta Dispersions
+
+#### by Zone
+
+```{r, eval=FALSE}
+beta.Gower1 <- betadisper(type.modGower, sampledf.log10$Zone,
+                          type = "centroid", bias.adjust = TRUE)
+permutest(beta.Gower1,  pairwise = TRUE, permutations = 10000)
+```
+
+#### By Reef
+
+```{r eval=FALSE}
+beta.GowerR <- betadisper(type.modGower, sampledf.log10$Reef,
+                          type = "centroid", bias.adjust = TRUE)
+permutest(beta.GowerR,  pairwise = TRUE, permutations = 10000)
+```
+
+#### by Position
+
+```{r, eval=FALSE}
+beta.Gower2 <- betadisper(type.modGower, sampledf.log10$Position,
+                          type = "centroid", bias.adjust = TRUE)
+permutest(beta.Gower2,  pairwise = TRUE, permutations = 10000)
+```
+
+#### By Reef Type (inside bay)
+
+```{r, eval=FALSE}
+data.log10.inner <- subset_samples(data.log10, Zone != "Outer bay")
+type.modGower.inner <- phyloseq::distance(data.log10.inner,
+                                          method = "altGower")
+sampledf.inner <- data.frame(sample_data(data.log10.inner))
+beta.Gower3 <- betadisper(type.modGower.inner, sampledf.inner$Reef_type,
+                          type = "centroid", bias.adjust = TRUE)
+permutest(beta.Gower3,  binary = TRUE,  pairwise = TRUE, permutations = 10000)
+```
+
+### PERMANOVA
+
+#### By Zone
+
+```{r, eval=FALSE}
+set.seed(1911)
+adonis.modGower0 <- adonis(type.modGower ~ Zone, data = sampledf.log10,
+                           permutations = 10000)
+```
+
+#### By Reef
+
+```{r, eval=FALSE}
+adonis.modGowerR <- adonis(type.modGower ~ Reef, data = sampledf.log10,
+                           permutations = 10000)
+```
+
+#### By Zone nested with Reef
+
+```{r, eval=FALSE}
+adonis.modGower1 <- adonis(type.modGower ~ Zone/Reef, data = sampledf.log10,
+                           permutations = 10000)
+```
+
+
+#### By Position nested with Reef
+
+```{r, eval=FALSE}
+adonis.modGower2 <- adonis(type.modGower ~ Position/Reef, data = sampledf.log10,
+                           permutations = 10000)
+```
+
+#### By Reef Type nested with Reef (inside bay)
+
+```{r, eval=FALSE}
+data.log10.inner <- subset_samples(data.log10, Zone != "Outer bay")
+type.modGower.inner <- phyloseq::distance(data.log10.inner, method = "altGower")
+sampledf.inner.log10 <- data.frame(sample_data(data.log10.inner))
+adonis.modGower3 <- adonis(type.modGower.inner ~ Reef_type/Reef,
+                           data = sampledf.inner.log10, permutations = 10000)
+```
+
+### Pairwise comparisons
+
+#### By Zone
+
+```{r, eval=FALSE}
+pairwise.adonis(type.modGower, factors = sampledf$Zone)
+```
+
+#### By Reef
+
+```{r, eval=FALSE}
+pairwise.adonis(type.modGower, factors = sampledf$Reef)
+```
+
+## Bray Curtis
+
+### Dissimilarity Matrix
+
+```{r, eval=FALSE}
+set.seed(1911)
+type.bray <- phyloseq::distance(ps.core, method = "bray")
+sampledf <- data.frame(sample_data(ps.core))
+```
+
+### Beta Dispersions
+
+#### By Zone
+
+```{r, eval=FALSE}
+beta.bray1 <- betadisper(type.bray, sampledf$Zone,
+                         type = "centroid", bias.adjust = TRUE)
+permutest(beta.bray1,  pairwise = TRUE, permutations = 10000)
+```
+
+#### By Reef
+
+```{r, eval=FALSE}
+beta.brayR <- betadisper(type.bray, sampledf$Reef,
+                         type = "centroid", bias.adjust = TRUE)
+permutest(beta.brayR,  pairwise = TRUE, permutations = 10000)
+```
+
+#### By Position
+
+```{r, eval=FALSE}
+beta.bray2 <- betadisper(type.bray, sampledf$Position,
+                         type = "centroid", bias.adjust = TRUE)
+permutest(beta.bray2,  pairwise = TRUE, permutations = 10000)
+```
+
+#### By Reef Type (inside bay)
+
+```{r, eval=FALSE}
+ps.core.inner <- subset_samples(ps.core, Zone != "Outer bay")
+type.bray.inner <- phyloseq::distance(ps.core.inner, method = "bray")
+beta.bray3 <- betadisper(type.bray.inner, sampledf.inner$Reef_type,
+                         type = "centroid", bias.adjust = TRUE)
+permutest(beta.bray3,  pairwise = TRUE, permutations = 10000)
+```
+
+### PERMANOVA
+
+#### By Zone
+
+```{r, eval=FALSE}
+set.seed(1911)
+adonis.bray0 <- adonis(type.bray ~ Zone, data = sampledf,
+                       permutations = 10000)
+```
+
+#### By Reef
+
+```{r, eval=FALSE}
+adonis.brayR <- adonis(type.bray ~ Reef, data = sampledf,
+                       permutations = 10000)
+```
+
+#### By Zone nested with in Reef
+
+```{r, eval=FALSE}
+adonis.brayR
+adonis.bray1 <- adonis(type.bray ~ Zone/Reef, data = sampledf,
+                       permutations = 10000)
+```
+
+#### By Position nested with Reef
+
+```{r, eval=FALSE}
+adonis.bray2 <- adonis(type.bray ~ Position/Reef, data = sampledf,
+                       permutations = 10000)
+```
+
+#### By Reef Type nested with Reef (inside bay)
+
+```{r, eval=FALSE}
+ps.core.inner <- subset_samples(ps.core, Zone != "Outer bay")
+type.bray.inner <- phyloseq::distance(ps.core.inner, method = "bray")
+sampledf.inner <- data.frame(sample_data(ps.core.inner))
+adonis.bray3 <- adonis(type.bray.inner ~ Reef_type/Reef, data = sampledf.inner,
+                       permutations = 10000)
+```
+
+### Pairwise comparisons
+
+#### By Zone
+
+```{r, eval=FALSE}
+set.seed(1911)
+pairwise.adonis(type.bray, factors = sampledf$Zone)
+```
+
+#### By Reef
+
+```{r, eval=FALSE}
+set.seed(1911)
+pairwise.adonis(type.bray, factors = sampledf$Reef)
+```
+
+## UNIFRAC
+
+### Dissimilarity Matrix
+
+```{r, eval=FALSE}
+set.seed(1911)
+type.unifrac <- phyloseq::distance(ps.core, method = "unifrac", weighted=F)
+sampledf <- data.frame(sample_data(ps.core))
+```
+
+### Beta Dispersions
+
+#### By Zone
+
+```{r, eval=FALSE}
+beta.unifrac1 <- betadisper(type.unifrac, sampledf$Zone,
+                            type = "centroid", bias.adjust = TRUE)
+permutest(beta.unifrac1,  pairwise = TRUE, permutations = 10000)
+```
+
+#### By Reef
+
+```{r, eval=FALSE}
+beta.unifracR <- betadisper(type.unifrac, sampledf$Reef,
+                            type = "centroid", bias.adjust = TRUE)
+permutest(beta.unifracR,  pairwise = TRUE, permutations = 10000)
+```
+
+#### By Position
+
+```{r, eval=FALSE}
+beta.unifrac2 <- betadisper(type.unifrac, sampledf$Position,
+                            type = "centroid", bias.adjust = TRUE)
+permutest(beta.unifrac2, pairwise = TRUE, permutations = 10000)
+```
+
+#### By Reef Type (inside bay)
+
+```{r, eval=FALSE}
+ps.core.inner <- subset_samples(ps.core, Zone != "Outer bay")
+type.unifrac.inner <- phyloseq::distance(ps.core.inner, method = "unifrac")
+sampledf.core.inner <- data.frame(sample_data(ps.core.inner))
+beta.unifrac3 <- betadisper(type.unifrac.inner, sampledf.core.inner$Reef_type,
+                            type = "centroid", bias.adjust = TRUE)
+permutest(beta.unifrac3,  pairwise = TRUE, permutations = 10000)
+```
+
+### PERMANOVA
+
+#### By Zone
+
+```{r, eval=FALSE}
+set.seed(1911)
+adonis.unifrac0 <- adonis(type.unifrac ~ Zone, data = sampledf,
+                          permutations = 10000)
+```
+
+#### By Reef
+
+```{r, eval=FALSE}
+adonis.unifracR <- adonis(type.unifrac ~ Reef, data = sampledf,
+                          permutations = 10000)
+```
+
+#### By Zone nested with Reef
+
+```{r, eval=FALSE}
+adonis.unifrac1 <- adonis(type.unifrac ~ Zone/Reef, data = sampledf,
+                          permutations = 10000)
+```
+
+#### By Position nested with Reef
+
+```{r, eval=FALSE}
+adonis.unifrac2 <- adonis(type.unifrac ~ Position/Reef, data = sampledf,
+                          permutations = 10000)
+```
+
+#### By Reef Type nested with Reef (inside bay)
+
+```{r, eval=FALSE}
+ps.core.inner <- subset_samples(ps.core, Zone != "Outer bay")
+type.unifrac.inner <- phyloseq::distance(ps.core.inner, method = "unifrac")
+sampledf.inner <- data.frame(sample_data(ps.core.inner))
+```
+
+```{r, eval=FALSE}
+adonis.unifrac3 <- adonis(type.unifrac.inner ~ Reef_type/Reef,
+                          data = sampledf.inner,
+                          permutations = 10000)
+```
+
+### Pairwise comparisons
+
+#### By Zone
+
+```{r, eval=FALSE}
+set.seed(1911)
+pairwise.adonis(type.unifrac, factors = sampledf$Zone)
+```
+
+#### By Reef
+
+```{r, eval=FALSE}
+set.seed(1911)
+pairwise.adonis(type.unifrac, factors = sampledf$Reef)
+```
+
+## GUNIFRAC
+
+### Dissimilarity Matrix
+
+```{r, eval=FALSE}
+asv.tab<-otu_table(ps.core)
+ps.core.inner <- subset_samples(ps.core, Zone != "Outer bay")
+asv.tab.inner <- otu_table(ps.core.inner)
+```
+
+```{r, eval=FALSE}
+tree.fish.core<-phy_tree(ps.core)
+tree.fish.core.inner<-phy_tree(ps.core.inner)
+```
+
+```{r, eval=FALSE}
+fish.sample.core<-sample_data(ps.core)
+fish.sample.core.inner<-sample_data(ps.core.inner)
+```
+
+```{r, eval=FALSE}
+groups2.core <- fish.sample.core$Zone
+groupsR.core <- fish.sample.core$Reef
+groups.inner.core <- fish.sample.core.inner$Zone
+position.core <- fish.sample.core$Position
+```
+
+```{r, eval=FALSE}
+unifracs <- GUniFrac(asv.tab, tree.fish.core,
+                     alpha=c(0, 0.5, 1))$unifracs
+unifracs2 <- GUniFrac(asv.tab.inner, tree.fish.core.inner,
+                      alpha=c(0, 0.5, 1))$unifracs
+```
+
+```{r, eval=FALSE}
+d5.all <- unifracs[, , "d_0.5"]
+d5.inner <- unifracs2[, , "d_0.5"]
+```
+
+```{r, eval=FALSE}
+type.gunifrac <- as.dist(d5.all)
+type.gunifrac.inner <- as.dist(d5.inner)
+```
+
+### Beta Dispersions
+
+#### By Zone
+
+```{r, eval=FALSE}
+set.seed(1911)
+beta.gunifrac1 <- betadisper(as.dist(d5.all), groups2.core,
+                             type = "centroid", bias.adjust = TRUE)
+permutest(beta.gunifrac1, pairwise = TRUE, permutations = 10000)
+```
+
+#### By Reef
+
+```{r, eval=FALSE}
+beta.gunifracR <- betadisper(as.dist(d5.all), groupsR.core,
+                             type = "centroid", bias.adjust = TRUE)
+permutest(beta.gunifracR, pairwise = TRUE, permutations = 10000)
+```
+
+#### By Position
+
+```{r, eval=FALSE}
+beta.gunifrac2 <- betadisper(as.dist(d5.all), position.core,
+                             type = "centroid", bias.adjust = TRUE)
+permutest(beta.gunifrac2, pairwise = TRUE, permutations = 10000)
+```
+
+#### By Zone (Position, inside bay)
+
+```{r, eval=FALSE}
+beta.gunifrac.inner <- betadisper(as.dist(d5.inner), groups.inner.core,
+                                  type = "centroid", bias.adjust = TRUE)
+permutest(beta.gunifrac.inner, pairwise = TRUE, permutations = 10000)
+```
+
+### PERMANOVA
+
+#### By Zone nested with Reef
+
+```{r, eval=FALSE}
+sampledf <- data.frame(sample_data(ps.core))
+sampledf.inner <- data.frame(sample_data(ps.core.inner))
+```
+
+#### By Zone
+
+```{r, eval=FALSE}
+adonis.gunifrac0<- adonis(type.gunifrac ~ Zone, data = sampledf,
+                          permutations = 10000)
+```
+
+#### By Reef
+
+```{r, eval=FALSE}
+adonis.gunifracR<- adonis(type.gunifrac ~ Zone, data = sampledf,
+                          permutations = 10000)
+```
+
+#### By Zone nested with in Reef
+
+```{r, eval=FALSE}
+adonis.gunifrac1<- adonis(type.gunifrac ~ Zone/Reef, data = sampledf,
+                          permutations = 10000)
+```
+
+#### By Position nested with Reef
+
+```{r, eval=FALSE}
+adonis.gunifrac2<- adonis(type.gunifrac ~ Position/Reef, data = sampledf,
+                          permutations = 10000)
+```
+
+#### By Reef Type nested with Reef (inside bay)
+
+```{r, eval=FALSE}
+adonis.gunifrac3<- adonis(type.gunifrac.inner ~ Reef_type/Reef,
+                          data = sampledf.core.inner, permutations = 10000)
+```
+
+### Pairwise comparisons
+
+#### By Zone
+
+```{r, eval=FALSE}
+pairwise.adonis(type.gunifrac, factors = sampledf$Zone,
+                p.adjust.m = "bonferroni")
+```
+
+#### By Reef
+
+```{r, eval=FALSE}
+pairwise.adonis(type.gunifrac, factors = sampledf$Reef,
+                p.adjust.m = "bonferroni")
+```
+
+## WUNIFRAC
+
+### Dissimilarity Matrix
+
+```{r, eval=FALSE}
+set.seed(1911)
+type.wunifrac <- phyloseq::distance(ps.core, method = "wunifrac")
+sampledf <- data.frame(sample_data(ps.core))
+```
+
+### Beta Dispersions
+
+#### By Zone
+
+```{r, eval=FALSE}
+beta.wunifrac1 <- betadisper(type.wunifrac, sampledf$Zone,
+                             type = "centroid", bias.adjust = TRUE)
+permutest(beta.wunifrac1,  pairwise = TRUE, permutations = 10000)
+```
+
+```{r, eval=FALSE}
+ps.core.inner <- subset_samples(ps.core, Zone != "Outer bay")
+type.wunifrac.inner <- phyloseq::distance(ps.core.inner, method = "wunifrac")
+sampledf.inner <- data.frame(sample_data(ps.core.inner))
+```
+
+#### By Reef
+
+```{r, eval=FALSE}
+beta.wunifracR <- betadisper(type.wunifrac, sampledf$Reef,
+                             type = "centroid", bias.adjust = TRUE)
+permutest(beta.wunifracR,  pairwise = TRUE, permutations = 10000)
+```
+
+#### By Position
+
+```{r, eval=FALSE}
+beta.wunifrac2 <- betadisper(type.wunifrac, sampledf$Position,
+                             type = "centroid", bias.adjust = TRUE)
+permutest(beta.wunifrac2,  pairwise = TRUE, permutations = 10000)
+```
+
+#### By Reef Type (inside bay)
+
+```{r, eval=FALSE}
+beta.wunifrac3 <- betadisper(type.wunifrac.inner, sampledf.inner$Reef_type,
+                             type = "centroid", bias.adjust = TRUE)
+permutest(beta.wunifrac3,  pairwise = TRUE, permutations = 10000)
+```
+
+### PERMANOVA
+
+#### By Zone
+
+```{r, eval=FALSE}
+set.seed(1911)
+adonis.wunifrac0 <- adonis(type.wunifrac ~ Zone, data = sampledf,
+                           permutations = 10000)
+```
+
+#### By Reef
+
+```{r, eval=FALSE}
+adonis.wunifracR <- adonis(type.wunifrac ~ Reef, data = sampledf,
+                           permutations = 10000)
+```
+
+#### By Zone nested with Reef
+
+```{r, eval=FALSE}
+adonis.wunifrac1 <- adonis(type.wunifrac ~ Zone/Reef, data = sampledf,
+                           permutations = 10000)
+```
+
+#### By Position nested with Reef
+
+```{r, eval=FALSE}
+adonis.wunifrac2 <- adonis(type.wunifrac ~ Position/Reef, data = sampledf,
+                           permutations = 10000)
+```
+
+#### By Reef Type nested with Reef (inside bay)
+
+```{r, eval=FALSE}
+ps.core.inner <- subset_samples(ps.core, Zone != "Outer bay")
+type.wunifrac.inner <- phyloseq::distance(ps.core.inner, method = "wunifrac")
+sampledf.inner <- data.frame(sample_data(ps.core.inner))
+```
+
+```{r, eval=FALSE}
+adonis.wunifrac3 <- adonis(type.wunifrac.inner ~ Reef_type/Reef,
+                           data = sampledf.inner, permutations = 10000)
+```
+
+### Pairwise comparisons
+
+#### By Zone
+
+```{r, eval=FALSE}
+pairwise.adonis(type.wunifrac, factors = sampledf$Zone)
+```
+
+#### By Reef
+
+```{r, eval=FALSE}
+pairwise.adonis(type.wunifrac, factors = sampledf$Reef)
+```
+
+## Core Community Summary
+
+```{r, eval=FALSE, echo=FALSE}
+df1 <- data.frame(Distance_to_centroid=beta.jaccard1$distances,
+                  Zone=beta.jaccard1$group)
+df1$Metric <- "Jaccard"
+df1 <- cbind(df1, sampledf)
+df1[, c(4:8, 10:14)] <- NULL
+df1 <- df1 %>% tibble::rownames_to_column("Sample_ID")
+
+df2 <- data.frame(Distance_to_centroid=beta.Gower1$distances,
+                  Zone=beta.Gower1$group)
+df2$Metric <- "Modified Gower"
+df2 <- cbind(df2, sampledf)
+df2[, c(4:8, 10:14)] <- NULL
+df2 <- df2 %>% tibble::rownames_to_column("Sample_ID")
+
+df3 <- data.frame(Distance_to_centroid=beta.bray1$distances,
+                  Zone=beta.bray1$group)
+df3$Metric <- "Bray Curtis"
+df3 <- cbind(df3, sampledf)
+df3[, c(4:8, 10:14)] <- NULL
+df3 <- df3 %>% tibble::rownames_to_column("Sample_ID")
+
+df4 <- data.frame(Distance_to_centroid=beta.unifrac1$distances,
+                  Zone=beta.unifrac1$group)
+df4$Metric <- "Unifrac"
+df4 <- cbind(df4, sampledf)
+df4[, c(4:8, 10:14)] <- NULL
+df4 <- df4 %>% tibble::rownames_to_column("Sample_ID")
+
+df5 <- data.frame(Distance_to_centroid=beta.gunifrac1$distances,
+                  Zone=beta.gunifrac1$group)
+df5$Metric <- "Generalized Unifrac"
+df5 <- cbind(df5, sampledf)
+df5[, c(4:8, 10:14)] <- NULL
+df5 <- df5 %>% tibble::rownames_to_column("Sample_ID")
+
+df6 <- data.frame(Distance_to_centroid=beta.wunifrac1$distances,
+                  Zone=beta.wunifrac1$group)
+df6$Metric <- "Weighted Unifrac"
+df6 <- cbind(df6, sampledf)
+df6[, c(4:8, 10:14)] <- NULL
+df6 <- df6 %>% tibble::rownames_to_column("Sample_ID")
+
+all.data <- rbind(df1,df2,df3,df4,df5,df6)
+str(all.data)
+write.csv(all.data,
+          file = "tables/p5/boxplot_dispersion_data_core_NEW2_jjs.csv",
+          row.names = FALSE, quote = FALSE)
+```
+
+</br>
+
+```{r, echo=FALSE}
+datatable(all.data, width = "100%", escape = FALSE,
+          rownames = FALSE, filter = 'top',
+          caption = htmltools::tags$caption(
+            style = 'caption-side: bottom; text-align: left;',
+            'Table: ', htmltools::em('Beta diversity estimates of the
+                                     core fish microbiome. Use the buttons
+                                     to navigate through the table or
+                                     download a copy.')),
+          elementId = "sez1e1nej0qm6k8kgsff",
+          extensions = 'Buttons', options = list(
+            scrollX = TRUE,
+            dom = 'Blfrtip',
+            buttons = c('copy', 'csv', 'excel'),
+            pageLength = 5,
+            lengthMenu = list(c(5, 10, 50, -1), c("5", "10", "50", "All"))
+            )
+          ) %>%
+  DT::formatStyle(columns = colnames(all.data), fontSize = '80%') %>%
+  DT::formatRound(columns = "Distance_to_centroid", digits = 4)
+```
+
+```{r, include=FALSE, eval=FALSE}
+save.image("rdata/p5/bocasbiome_p5_core.rdata")
+remove(list = ls())
+```
+
+
+That's the end of Script 5. In the next Script we assess Beta Dispersion for all beta diversity estimates.
+
+</br>
+
+<div class="post-nav">
+<div class="post-nav-item">
+<div class="meta-nav">Previous</div>
+<a href="wf4.html" rel="next">N<sup><u>o</u></sup> 4. Alpha Diversity Estimates</a>
+</div>
+</div>
+
+<div class="post-nav">
+<div class="post-nav-item">
+<div class="meta-nav">Next</div>
+<a href="wf6.html" rel="prev">N<sup><u>o</u></sup> 6. Beta Dispersion</a>
+</div>
+</div>
+
+
+## Source Code {.appendix}
+
+The source code for this page can be accessed on GitHub by [clicking this link](https://github.com/bocasbiome/web/blob/master/wf5.Rmd).

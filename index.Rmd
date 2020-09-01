@@ -1,0 +1,105 @@
+---
+title: "Reproducible Workflows for the study:"
+description: |
+  *The gut microbiome stability of a butterflyfish is disrupted on severely degraded Caribbean reef habitats*.
+author:
+  - name: Friederike Clever
+#    url: https://example.com/norajones
+    affiliation: Manchester Metropolitan University
+#    affiliation_url: https://example.com/spacelysprokets
+  - name: Jade M. Sourisse
+#    url: https://example.com/norajones
+    affiliation: Swire Institute of Marine Science
+#    affiliation_url: https://example.com/spacelysprokets
+  - name: Richard F. Preziosi
+#    url: https://example.com/norajones
+    affiliation: Manchester Metropolitan University
+#    affiliation_url: https://example.com/spacelysprokets
+  - name: Jonathan A. Eisen
+#    url: https://example.com/norajones
+    affiliation: University of California, Davis
+#    affiliation_url: https://example.com/spacelysprokets
+  - name: E. Catalina Rodriguez Guerra
+#    url: https://example.com/norajones
+    affiliation: Smithsonian Tropical Research Institute
+#    affiliation_url: https://example.com/spacelysprokets
+  - name: Jarrod J. Scott
+#    url: https://example.com/norajones
+    affiliation: Smithsonian Tropical Research Institute
+#    affiliation_url: https://example.com/spacelysprokets
+  - name: Laetitia G.E. Wilkins
+#    url: https://example.com/norajones
+    affiliation: University of California, Davis
+#    affiliation_url: https://example.com/spacelysprokets
+  - name: Andrew H. Altieri
+#    url: https://example.com/norajones
+    affiliation: University of Florida
+#    affiliation_url: https://example.com/spacelysprokets
+  - name: W. Owen McMillan1
+#    url: https://example.com/norajones
+    affiliation: Smithsonian Tropical Research Institute
+#    affiliation_url: https://example.com/spacelysprokets
+  - name: Matthieu Leray
+#    url: https://example.com/norajones
+    affiliation: Smithsonian Tropical Research Institute
+#    affiliation_url: https://example.com/spacelysprokets
+#date: "`r Sys.Date()`"
+output:
+    distill::distill_article:
+      toc: false
+      includes:
+        in_header: assets/header.html
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+If you want to follow the workflow step-by-step, please use the navigation bar above where scripts are presented in order. If you would instead like to jump to specific sections, please select an area on the **clickable image map** to go directly to that secxtion.
+
+<div id="image_map">
+<map name="workflow">
+    <area target="_blank" alt="" title="all fish ASVs" href="wf3.html" coords="82,65,208,168" shape="rect">
+    <area target="_blank" alt="" title="all ASVs" href="wf1.html#data-preparation" coords="23,12,261,65" shape="rect">
+    <area target="_blank" alt="" title="all ASVs" href="wf1.html#data-preparation" coords="20,168,263,219" shape="rect">
+    <area target="_blank" alt="" title="all ASVs" href="wf1.html#data-preparation" coords="23,67,80,167" shape="rect">
+    <area target="_blank" alt="" title="all ASVs" href="wf1.html#data-preparation" coords="208,66,264,168" shape="rect">
+    <area target="_blank" alt="" title="fish-core" href="wf1.html#run-indicator-analysis-to-identify-core-taxa" coords="94,284,197,363" shape="rect">
+    <area target="_blank" alt="" title="alpha diversity all" href="wf4.html#whole-community" coords="300,76,419,105" shape="rect">
+    <area target="_blank" alt="" title="beta dispersion all" href="wf6.html#beta-dispersion-plots-whole-v-core" coords="300,106,419,128" shape="rect">
+    <area target="_blank" alt="" title="beta diversity all" href="wf5.html#whole-community" coords="300,131,419,156" shape="rect">
+    <area target="_blank" alt="" title="alpha diversity core" href="wf4.html#core-community" coords="302,287,421,312" shape="rect">
+    <area target="_blank" alt="" title="beta dispersion core" href="wf6.html#beta-dispersion-plots-whole-v-core" coords="301,314,419,337" shape="rect">
+    <area target="_blank" alt="" title="beta diversity core" href="wf5.html#core-community" coords="303,339,420,365" shape="rect">
+    <area target="_blank" alt="" title="PIME" href="wf7.html" coords="596,53,748,85" shape="rect">
+    <area target="_blank" alt="" title="PIME" href="wf7.html" coords="596,99,748,132" shape="rect">
+    <area target="_blank" alt="" title="PIME" href="wf7.html" coords="597,147,749,179" shape="rect">
+    <area target="_blank" alt="" title="PIME" href="wf7.html" coords="583,11,766,51" shape="rect">
+    <area target="_blank" alt="" title="PIME" href="wf7.html" coords="581,177,763,208" shape="rect">
+</map>
+<img src="assets/wf_map.png" alt="image map example" usemap="#workflow">
+</div>
+
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Interdum consectetur libero id faucibus nisl tincidunt eget nullam non. Eget nullam non nisi est sit amet facilisis. Sem viverra aliquet eget sit amet tellus cras. Ut venenatis tellus in metus vulputate eu. Et pharetra pharetra massa massa ultricies mi quis hendrerit. Pretium aenean pharetra magna ac placerat vestibulum lectus mauris. Ut placerat orci nulla pellentesque dignissim. Vitae congue mauris rhoncus aenean vel elit scelerisque. Imperdiet sed euismod nisi porta lorem mollis aliquam ut. Mauris nunc congue nisi vitae suscipit tellus mauris a. Turpis egestas integer eget aliquet nibh praesent tristique. Mauris augue neque gravida in fermentum et sollicitudin ac.
+
+## Credits {.appendix}
+
+The banner photo, entitled **Butterfly-fish, *Chaetodon capistratus* Linnaeus**, by [David Starr Jordan](https://en.wikipedia.org/wiki/en:David_Starr_Jordan) (1851–1931) was retreived from Wikimedia Commons ([original](https://upload.wikimedia.org/wikipedia/commons/b/b4/FMIB_52079_Butterfly-fish%2C_Chaetodon_capistratus_Linnaeus_Jamaica.jpeg)) and licenced under [CC-0](https://creativecommons.org/share-your-work/public-domain/cc0). The image is part of the [Freshwater and Marine Image Bank](https://content.lib.washington.edu/fishweb/index.html) at the University of Washington. 
+
+## Acknowledgements {.appendix}
+
+We thank Lucia Rodriguez for field assistance, Joan Antaneda for her help in the laboratory, Ross Whippo for conducting the fish survey and Clare Fieseler for taking photos of the benthos. The staff of the Bocas del Toro Research Station provided logistical support. We are grateful to Kristin Saltonstall and Marta Vargas for their support at the Smithsonian Tropical Research Institute’s (STRI) Ecological and Evolutionary Genomics Laboratory . Friederike Clever was supported by a Smithsonian Short Term Fellowship. This project was funded, in part, by a grant from the Gordon and Betty Moore foundation to STRI and UC Davis (PIs: William Wcislo and Jonathan Eisen; http://doi.org/10.37807/GBMF5603) and a PhD studentship by Manchester Metropolitan University to Friederike Clever. A research permit was issued by the Ministerio de Ambiente Panamá (No. SE/A-113-17).
+
+## Author Contributions {.appendix}
+
+FC, ML, and JJS conceived the study. ML, FC, and RFP designed the study with input from AHA. FC, ML, and JJS conducted the fieldwork. ECRG and FC dissected the fish guts. FC extracted the DNA. JS and ML prepared the DNA for sequencing and processed the sequencing data. RFP, AHA, WOM, and ML contributed reagents and supplies. ECRG analysed the photographic benthic quadrats. FC, JS, and ML analysed the data and wrote the first draft of the manuscript with input from RFP and LGEW. All authors reviewed the manuscript and contributed to the final version.
+
+## Data Availability {.appendix}
+
+Sequencing data has been submitted to the NCBI Short Read Archive (SRA) database (https://www.ncbi.nlm.nih.gov/sra) under project number XXX. The data analysis script is available on Figshare (LINK)
+
+## Source Code {.appendix}
+
+The source code for this page can be accessed on GitHub by [clicking this link](https://github.com/bocasbiome/web/blob/master/index.Rmd). Source code for the complete site can be accessed [here](https://github.com/bocasbiome/web/) or by clicking  the icon on the far right of the navigation bar.
