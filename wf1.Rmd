@@ -350,11 +350,15 @@ And a look at the individual ASVs.
 
 <br/>
 
-```{r, echo=FALSE, layout="l-page"}
+```{r, echo=FALSE, eval=FALSE}
 tax_core_mod3 <- data.frame(tax_core_mod2) %>% tibble::rownames_to_column("ID")
 indval.out1 <- data.frame(indval.out) %>% tibble::rownames_to_column("ID")
 indval_table <- dplyr::left_join(tax_core_mod3, indval.out1, by = "ID")
 indval_table[,8:13] <- list(NULL)
+```
+
+
+```{r, echo=FALSE, layout="l-page"}
 datatable(indval_table, width = "100%", escape = FALSE,
           rownames = FALSE, filter = 'top',
           caption = htmltools::tags$caption(
