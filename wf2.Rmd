@@ -105,7 +105,6 @@ head(tax_table(ps.slv.tree.mbio.rar.bocas))
 saveRDS(ps.slv.tree.mbio.rar.bocas,"rdata/p2/ps_16S_bocas_rar_all_ASVID.rds")
 ```
 
-
 ## Barplots Filter Rare Taxa
 
 ```{r, eval=FALSE, echo=FALSE}
@@ -129,7 +128,6 @@ Fractions_genus <- ps.slv.tree.mbio.rar.bocas %>%
         filter(Abundance > 0.05) %>%
         arrange(Genus)
 ```
-
 
 Then, we set all of the plot parameters. If you want to see all the code for plotting, please see the `.Rmd` file linked on the bottom of the page.
 
@@ -226,11 +224,6 @@ fig <- ggarrange(fig01, fig00, ncol = 1,labels = c("A", "B"))
 fig
 dev.off()
 
-tiff("figures/p2/All_Fractions_double.tiff", height = 14, width = 28,
-     units = 'cm',compression = "lzw", res = 600, bg = 'white')
-fig
-dev.off()
-
 fig
 pdf("figures/p2/All_Fractions_double.pdf", height = 12, width = 16)
 fig
@@ -318,47 +311,72 @@ for (i in 1:nrow(tax.clean)){
 rm(class, order, phylum, kingdom)
 ```
 
+Then, we create new ASV names that have lowest rank name attached.
+
+```{r, eval=FALSE}
+tax.clean <- tax.clean %>% unite("ASV_IDa", Genus:ASV_ID,
+                                 remove = FALSE, sep = "_")
+tax.clean <- tax.clean %>% unite("ASV_IDb", ASV_ID:Genus,
+                                 remove = FALSE, sep = "_")
+tax.clean <- tax.clean[, c(1,2,3,4,5,8,9,6,7,10)]
+tax.clean$ASV_IDa <-
+  str_replace_all(tax.clean$ASV_IDa,
+                  'Clostridium_sensu_stricto_[0-9]',
+                  'Clostridium')
+tax.clean$ASV_IDb <-
+  str_replace_all(tax.clean$ASV_IDb,
+                  'Clostridium_sensu_stricto_[0-9]',
+                  'Clostridium')
+tax.clean$ASV_IDc <- tax.clean$ASV_IDa
+tax.clean$ASV_IDc <-
+  str_replace_all(tax.clean$ASV_IDc,
+                  '_ASV', '')
+tax.clean <- tax.clean[, c(1,2,3,4,5,6,7,8,9,11,10)]
+write.csv(tax.clean, "tables/p2/tax_rar_new_no_na.csv")
+```
 
 And finally, add the taxonomy table back to the phyloseq object.
 
 ```{r, eval=FALSE}
 tax_table(ps.slv.tree.mbio.rar.bocas_no_na) <- as.matrix(tax.clean)
-saveRDS(ps.slv.tree.mbio.rar.bocas_no_na,
-        "rdata/p2/ps_16S_bocas_rar_all_ASVID_no_NA.rds")
 ```
 
 ```{r, eval=FALSE}
 rank_names(ps.slv.tree.mbio.rar.bocas_no_na)
+saveRDS(ps.slv.tree.mbio.rar.bocas_no_na, "rdata/p2/ps_16S_bocas_rar_all_ASVID_no_NA.rds")
 ```
 
 ***Optional*** If you want, you can choose to separate Proteobacteria into classes and then run the phylum level analysis. We do not do that here however the code is available if you wish to implement this option.
 
 ```{r, eval=FALSE}
-proteo <- subset_taxa(ps.slv.tree.mbio.rar.bocas_no_na, Phylum=="Proteobacteria")
-get_taxa_unique(proteo, taxonomic.rank = rank_names(proteo)[3], errorIfNULL=TRUE)
-ps.rar.no.na.proteo <- ps.slv.tree.mbio.rar.bocas_no_na
-tax.clean2 <- data.frame(tax_table(ps.rar.no.na.proteo))
-for (i in 1:nrow(tax.clean2)){
-    if (tax.clean2[i,2] == "Proteobacteria" & tax.clean2[i,3] == "Alphaproteobacteria"){
-        phylum <- paste("Alphaproteobacteria")
-        tax.clean2[i, 2] <- phylum
-}   else if (tax.clean2[i,2] == "Proteobacteria" & tax.clean2[i,3] == "Gammaproteobacteria"){
-        phylum <- paste("Gammaproteobacteria")
-        tax.clean2[i, 2] <- phylum
-}   else if (tax.clean2[i,2] == "Proteobacteria" & tax.clean2[i,3] == "Deltaproteobacteria"){
-        phylum <- paste("Deltaproteobacteria")
-        tax.clean2[i, 2] <- phylum
-}   else if (tax.clean2[i,2] == "Proteobacteria" & tax.clean2[i,3] == "p_Proteobacteria"){
-        phylum <- paste("unc_Proteobacteria")
-        tax.clean2[i, 2] <- phylum
-   }
-}
-tax_table(ps.rar.no.na.proteo) <- as.matrix(tax.clean2)
-rank_names(ps.rar.no.na.proteo)
-rm(class, order, phylum, kingdom)
-get_taxa_unique(ps.rar.no.na.proteo,
-                taxonomic.rank = rank_names(ps.rar.no.na.proteo)[2],
-                errorIfNULL=TRUE)
+##############################
+### UNCOMMENT CODE TO RUN ####
+##############################
+#proteo <- subset_taxa(ps.slv.tree.mbio.rar.bocas_no_na, Phylum=="Proteobacteria")
+#get_taxa_unique(proteo, taxonomic.rank = rank_names(proteo)[3], errorIfNULL=TRUE)
+#ps.rar.no.na.proteo <- ps.slv.tree.mbio.rar.bocas_no_na
+#tax.clean2 <- data.frame(tax_table(ps.rar.no.na.proteo))
+#for (i in 1:nrow(tax.clean2)){
+#    if (tax.clean2[i,2] == "Proteobacteria" & tax.clean2[i,3] == "Alphaproteobacteria"){
+#        phylum <- paste("Alphaproteobacteria")
+#        tax.clean2[i, 2] <- phylum
+#}   else if (tax.clean2[i,2] == "Proteobacteria" & tax.clean2[i,3] == "Gammaproteobacteria"){
+#        phylum <- paste("Gammaproteobacteria")
+#        tax.clean2[i, 2] <- phylum
+#}   else if (tax.clean2[i,2] == "Proteobacteria" & tax.clean2[i,3] == "Deltaproteobacteria"){
+#        phylum <- paste("Deltaproteobacteria")
+#        tax.clean2[i, 2] <- phylum
+#}   else if (tax.clean2[i,2] == "Proteobacteria" & tax.clean2[i,3] == "p_Proteobacteria"){
+#        phylum <- paste("unc_Proteobacteria")
+#        tax.clean2[i, 2] <- phylum
+#   }
+#}
+#tax_table(ps.rar.no.na.proteo) <- as.matrix(tax.clean2)
+#rank_names(ps.rar.no.na.proteo)
+#rm(class, order, phylum, kingdom)
+#get_taxa_unique(ps.rar.no.na.proteo,
+#                taxonomic.rank = rank_names(ps.rar.no.na.proteo)[2],
+#                errorIfNULL=TRUE)
 ```
 
 First we choose the number of taxa to display for phylum and genus, then collapse the rest into **Other**.
@@ -593,7 +611,6 @@ knitr::include_graphics("figures/p2/All_Fractions_double_all-1.png")
 save.image("rdata/p2/bocasbiome_p2_all.rdata")
 remove(list = ls())
 ```
-
 
 That's the end of Script 2. In the next Script we subset the fish samples for downstream analysis. 
 

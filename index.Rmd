@@ -1,5 +1,5 @@
 ---
-title: "Reproducible Workflows for the study:"
+title: "Reproducible workflows for the study:"
 description: |
   *The gut microbiome stability of a butterflyfish is disrupted on severely degraded Caribbean reef habitats*.
 author:

@@ -11,15 +11,15 @@ bibliography: assets/cite.bib
 ---
 
 ```{r setup, include=FALSE}
-library(tidyverse) #JJS# Added
+library(tidyverse)
 library(phyloseq)
 library(microbiome)
 library(ggpubr)
-library(labdsv) #for indicator analysis
-require(gdata) #JJS# Added
-library(scales) #JJS# Added
-library(patchwork) #JJS# Added
-library(DT) #JJS# Added
+library(labdsv)
+require(gdata) 
+library(scales)
+library(patchwork)
+library(DT) 
 library(cowplot)
 library(plyr)
 library(data.table)
@@ -58,7 +58,7 @@ ps.whole <- readRDS("rdata/p3/ps_16S_bocas_fish_final.rds")
 ```
 
 ```{r, eval=FALSE}
-ps.whole<- phyloseq(otu_table(ps.whole), sample_data(ps.whole), tax_table(ps.whole))
+ps.whole <- phyloseq(otu_table(ps.whole), sample_data(ps.whole), tax_table(ps.whole))
 ps.whole@phy_tree <- NULL
 ```
 
@@ -82,6 +82,7 @@ per_variable_obj
 ```{r, echo=FALSE}
 per_variable_obj
 ```
+
 ## Calculate the Prevalence Intervals
 
 Using the output of `pime.split.by.variable`, we calculate the prevalence intervals with the function `pime.prevalence`. This function estimates the highest prevalence possible (no empty ASV table), calculates prevalence for taxa, starting at 5 maximum prevalence possible (no empty ASV table or dropping samples). After prevalence calculation, each prevalence interval are merged.
@@ -122,11 +123,14 @@ write.csv(imp65, file = "tables/p7/output_PIME_Zone65.csv")
 
 </br>
 
-```{r, echo=FALSE, layout='l-body-outset'}
-## elementId need to be unique https://www.random.org/strings/
+```{r, echo=FALSE, eval=FALSE}
 imp65_mod <- imp65
 imp65_mod[, 13:17] <- list(NULL)
 imp65_mod <- imp65_mod %>% dplyr::rename("ASV_ID" = "SequenceID")
+```
+
+```{r, echo=FALSE, layout='l-body-outset'}
+## elementId need to be unique https://www.random.org/strings/
 datatable(imp65_mod, width = "100%", escape = FALSE,
           rownames = FALSE, filter = 'top',
           caption = htmltools::tags$caption(
@@ -150,7 +154,7 @@ datatable(imp65_mod, width = "100%", escape = FALSE,
 Now we need to create a phyloseq object of ASVs at this cutoff (`r best`).
 
 ```{r, eval=FALSE}
-prevalence.65 = prevalences$`65`
+prevalence.65 <- prevalences$`65`
 summarize_phyloseq(prevalence.65)
 saveRDS(prevalence.65, "rdata/p7/Pime_Prevalence_65.rds")
 ```
@@ -192,10 +196,17 @@ sparsity_ps <- round(length(which(
 | Sparsity                            | `r sparsity_ps`                                      |
 | Total ASVS                          | `r total_asvs_ps`                                    |
 
+```{r, eval=FALSE, echo=FALSE}
+save.image("rdata/p7/checkpoint1.rdata")
+```
+
+```{r, eval=FALSE, echo=FALSE}
+load("rdata/p7/checkpoint1.rdata")
+```
 
 ## Estimate Error in Prediction
 
-Using  the function `pime.error.prediction` we can estimate the error in prediction. For each prevalence interval, this function randomizes the samples labels into arbitrary groupings using `n` random permutations, defined by the user. For each, randomized and prevalence filtered, data set the OOB error rate is calculated to estimate whether the original differences in groups of samples occur by chance. Results are in a list containing a table and a boxplot summarizing the results.
+Using  the function `pime.error.prediction` we can estimate the error in prediction. For each prevalence interval, this function randomizes the samples labels into arbitrary groupings using `n` random permutations, defined by the user. For each, randomized and prevalence filtered, data set the OOB error rate is calculated to estimate whether the original differences in groups of samples occur by chance. Results are in a list containing a table and a box plot summarizing the results.
 
 ```{r, eval=FALSE}
 randomized <- pime.error.prediction(ps.whole, "Zone", bootstrap = 100,
@@ -206,6 +217,9 @@ randomized <- pime.error.prediction(ps.whole, "Zone", bootstrap = 100,
 
 ```{r, echo=FALSE, eval=FALSE}
 oob_error <- randomized$`Results table`
+```
+
+```{r, echo=FALSE, layout='l-page'}
 datatable(oob_error, width = "100%", escape = FALSE,
           rownames = FALSE, filter = 'top',
           caption = htmltools::tags$caption(
@@ -228,7 +242,7 @@ datatable(oob_error, width = "100%", escape = FALSE,
 randomized$Plot
 ```
 
-It is also possible to estimate the variation of OOB error for each prevalence interval filtering. This is done by running the random forests classification for `n` times, determined by the user. The function will return a boxplot figure and a table for each classification error.
+It is also possible to estimate the variation of OOB error for each prevalence interval filtering. This is done by running the random forests classification for `n` times, determined by the user. The function will return a box plot figure and a table for each classification error.
 
 ```{r, eval=FALSE}
 replicated.oob.error <- pime.oob.replicate(prevalences, "Zone",
@@ -239,7 +253,7 @@ replicated.oob.error <- pime.oob.replicate(prevalences, "Zone",
 replicated.oob.error$Plot
 ```
 
-To obtain the confusion matrix from random forests classification use the folowing:
+To obtain the confusion matrix from random forests classification use the following:
 
 ```{r}
 best.prev$Confusion$`Prevalence 65`
@@ -261,10 +275,13 @@ write.csv(PIME_preval.65_SAM, file="tables/p7/PIME_sample_data.csv")
 
 </br>
 
-```{r, echo=FALSE, layout='l-page'}
-## elementId need to be unique https://www.random.org/strings/
+```{r, echo=FALSE, eval=FALSE}
 pime_asv_tab <- data.frame(PIME_preval.65_ASV)
 pime_asv_tab <- pime_asv_tab %>% tibble::rownames_to_column("Sample_ID")
+```
+
+```{r, echo=FALSE, layout='l-page'}
+## elementId need to be unique https://www.random.org/strings/
 datatable(pime_asv_tab, width = "100%", escape = FALSE,
           rownames = FALSE, filter = 'top',
           caption = htmltools::tags$caption(
@@ -291,24 +308,24 @@ per_zone
 per_zone
 ```
 
-Finally, we can create a  stacked barchart for the PIME obtained.
+Finally, we can create a  stacked bar chart for the PIME obtained.
 
-
-```{r, eval=FALSE}
-prevalence.65 <- readRDS("Pime_Prevalence_65.rds")
+```{r, eval=FALSE, echo=FALSE}
+##JJ# say not run, names already fixed
+#prevalence.65 <- readRDS("Pime_Prevalence_65.rds")
 ```
 
 ```{r, eval=FALSE, echo=FALSE}
-#JJ# say not run, names already fixed
-#manually modified ASV IDs in tax table for plotting
-tax.new <- read.csv("tables/p7/tax_table_PIME65.csv",
-                    row.names = 1, header = T, sep = ",")
-tax.matrix <- as.matrix(tax.new)
-#compile new phyloseq object with modified tax table
-prevalence.65.mod <- merge_phyloseq(otu_table(prevalence.65),
-                                    tax_table(tax.matrix),
-                                    sample_data(prevalence.65))
-tax_table(prevalence.65)
+##JJ# say not run, names already fixed
+##manually modified ASV IDs in tax table for plotting
+#tax.new <- read.csv("tables/p7/tax_table_PIME65.csv",
+#                    row.names = 1, header = T, sep = ",")
+#tax.matrix <- as.matrix(tax.new)
+##compile new phyloseq object with modified tax table
+#prevalence.65.mod <- merge_phyloseq(otu_table(prevalence.65),
+#                                    tax_table(tax.matrix),
+#                                    sample_data(prevalence.65))
+#tax_table(prevalence.65)
 ```
 
 
@@ -321,7 +338,6 @@ Zone_ASV <- prevalence.65 %>%
 level_order <- c('Outer bay', 'Inner bay', 'Inner bay disturbed')
 ```
 
-
 ```{r, eval=FALSE, echo=FALSE}
 ASV_colors_65 <- c(
         "mediumaquamarine","snow2", "darkseagreen2","pink3", "lightsalmon",
@@ -330,12 +346,6 @@ ASV_colors_65 <- c(
         "mediumturquoise","seagreen", "mistyrose")
 ```
 
-
-```{r, eval=FALSE, echo=FALSE}
-tiff("figures/p7/Barchart_PIME_65_ASV.tiff", height=15, width=26,
-     units='cm', compression="lzw", res=600, bg='white')
-
-```
 
 ```{r, eval=FALSE, echo=FALSE}
 fig00 <-
@@ -362,7 +372,6 @@ fig00
 ```
 
 ```{r, eval=FALSE, echo=FALSE}
-invisible(dev.off())
 pdf("figures/p7/Barchart_PIME_65_ASV.pdf", width = 16, height = 10)
 fig00
 invisible(dev.off())
@@ -406,4 +415,4 @@ That's the end of Script 7 and the entire workflow. Thanks for stopping by!
 
 ## Source Code {.appendix}
 
-The source code for this page can be accessed on GitHub by [clicking this link](https://github.com/bocasbiome/web/blob/master/wf6.Rmd).
+The source code for this page can be accessed on GitHub by [clicking this link](https://github.com/bocasbiome/web/blob/master/wf7.Rmd).
