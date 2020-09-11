@@ -814,7 +814,7 @@ That's the end of Script 4. In the next Script we calculate beta diversity estim
 
 <div class="post-nav">
 <div class="post-nav-item">
-<div class="meta-nav">Next</div>Next<br/>
+<div class="meta-nav">Next</div>
 <a href="wf5.html" rel="prev">N<sup><u>o</u></sup> 5. Fish Gut Beta Diversity Analysis</a>
 </div>
 </div>

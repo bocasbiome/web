@@ -35,7 +35,7 @@ author:
 #    url: https://example.com/norajones
     affiliation: University of Florida
 #    affiliation_url: https://example.com/spacelysprokets
-  - name: W. Owen McMillan1
+  - name: W. Owen McMillan
 #    url: https://example.com/norajones
     affiliation: Smithsonian Tropical Research Institute
 #    affiliation_url: https://example.com/spacelysprokets
@@ -56,7 +56,7 @@ knitr::opts_chunk$set(echo = FALSE)
 ```
 
 
-If you want to follow the workflow step-by-step, please use the navigation bar above where scripts are presented in order. If you would instead like to jump to specific sections, please select an area on the **clickable image map** to go directly to that secxtion.
+This site provides reproducible workflows for the study on the gut microbiome of Caribbean butterflyfish. If you want to follow the workflow step-by-step, please use the navigation bar above or the section below, where scripts are presented in order. If you would instead like to jump to specific analyses, please select an area on the **clickable image map** to go directly to that section.
 
 <div id="image_map">
 <map name="workflow">
@@ -82,7 +82,23 @@ If you want to follow the workflow step-by-step, please use the navigation bar a
 </div>
 
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Interdum consectetur libero id faucibus nisl tincidunt eget nullam non. Eget nullam non nisi est sit amet facilisis. Sem viverra aliquet eget sit amet tellus cras. Ut venenatis tellus in metus vulputate eu. Et pharetra pharetra massa massa ultricies mi quis hendrerit. Pretium aenean pharetra magna ac placerat vestibulum lectus mauris. Ut placerat orci nulla pellentesque dignissim. Vitae congue mauris rhoncus aenean vel elit scelerisque. Imperdiet sed euismod nisi porta lorem mollis aliquam ut. Mauris nunc congue nisi vitae suscipit tellus mauris a. Turpis egestas integer eget aliquet nibh praesent tristique. Mauris augue neque gravida in fermentum et sollicitudin ac.
+## Script Details
+
+[No 1. Indicator Analysis](wf1.html): Script to identify the core fish gut microbiome using Indicator Analysis.
+
+[No 2. Comparing Sample Fractions](wf2.html): Script to assess the relative abundance of phylum & genus level diversity across sample fractions.
+
+[No 3. Subset Fish Only Samples](wf3.html): Script to subset the fish gut only microbiome from the rarefied data for subsequent analyses.
+
+[No 4. Alpha Diversity Estimates](wf4.html): Script testing alpha diversity (Hill Diversity, Shannon Exponential, & Simpson Index) against the whole and core fish gut communities.
+
+[No 5. Beta Diversity Estimates](wf5.html): Script testing different distance metrics to estimate beta diversity using the whole and core fish gut communities across a range of environmental variables.
+
+[No 6. Beta Dispersion](wf6.html): Script to generate faceted boxplot of beta dispersion for all six alpha diversity metrics from the whole & core fish gut microbiomes.
+
+[No 7. PIME Analysis](wf7.html): Script to run Prevalence Interval for Microbiome Evaluation (PIME) to identify core fish gut ASVs.
+
+
 
 ## Credits {.appendix}
 
@@ -90,11 +106,11 @@ The banner photo, entitled **Butterfly-fish, *Chaetodon capistratus* Linnaeus**,
 
 ## Acknowledgements {.appendix}
 
-We thank Lucia Rodriguez for field assistance, Joan Antaneda for her help in the laboratory, Ross Whippo for conducting the fish survey and Clare Fieseler for taking photos of the benthos. The staff of the Bocas del Toro Research Station provided logistical support. We are grateful to Kristin Saltonstall and Marta Vargas for their support at the Smithsonian Tropical Research Institute’s (STRI) Ecological and Evolutionary Genomics Laboratory . Friederike Clever was supported by a Smithsonian Short Term Fellowship. This project was funded, in part, by a grant from the Gordon and Betty Moore foundation to STRI and UC Davis (PIs: William Wcislo and Jonathan Eisen; http://doi.org/10.37807/GBMF5603) and a PhD studentship by Manchester Metropolitan University to Friederike Clever. A research permit was issued by the Ministerio de Ambiente Panamá (No. SE/A-113-17).
+We thank Lucia Rodriguez for field assistance, Joan Antaneda for her help in the laboratory, Ross Whippo for conducting the fish survey and Clare Fieseler for taking photos of the benthos. The staff of the Bocas del Toro Research Station provided logistical support. We are grateful to Kristin Saltonstall and Marta Vargas for their support at the Smithsonian Tropical Research Institute’s (STRI) Ecological and Evolutionary Genomics Laboratory. Friederike Clever was supported by a Smithsonian Short Term Fellowship. This project was funded, in part, by a grant from the Gordon and Betty Moore foundation to STRI and UC Davis (PIs: William Wcislo and Jonathan Eisen; http://doi.org/10.37807/GBMF5603) and a PhD studentship by Manchester Metropolitan University to Friederike Clever. A research permit was issued by the Ministerio de Ambiente Panamá (No. SE/A-113-17).
 
 ## Author Contributions {.appendix}
 
-FC, ML, and JJS conceived the study. ML, FC, and RFP designed the study with input from AHA. FC, ML, and JJS conducted the fieldwork. ECRG and FC dissected the fish guts. FC extracted the DNA. JS and ML prepared the DNA for sequencing and processed the sequencing data. RFP, AHA, WOM, and ML contributed reagents and supplies. ECRG analysed the photographic benthic quadrats. FC, JS, and ML analysed the data and wrote the first draft of the manuscript with input from RFP and LGEW. All authors reviewed the manuscript and contributed to the final version.
+FC, ML, and JJS conceived the study. ML, FC, and RFP designed the study with input from AHA. FC, ML, and JJS conducted the fieldwork. ECRG and FC dissected the fish guts. FC extracted the DNA. JS and ML prepared the DNA for sequencing and processed the sequencing data. RFP, AHA, WOM, and ML contributed reagents and supplies. ECRG analysed the photographic benthic quadrats. FC, JS, and ML analysed the data and wrote the first draft of the manuscript with input from RFP and LGEW. All authors reviewed the manuscript and contributed to the final version. JJS and FC created the site.
 
 ## Data Availability {.appendix}
 

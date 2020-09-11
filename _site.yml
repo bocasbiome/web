@@ -39,9 +39,9 @@ navbar:
     - text: "7. PIME Analysis"
 #      icon: fa-flask
       href: wf7.html
-    - text: "Data"
+#    - text: "Data"
 #      icon: fa-database
-      href: data-availability.html
+#      href: data-availability.html
 #    - text: "SOM"
 #      icon:
 #      href: supplemental-material.html
