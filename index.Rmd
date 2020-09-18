@@ -114,7 +114,7 @@ FC, ML, and JJS conceived the study. ML, FC, and RFP designed the study with inp
 
 ## Data Availability {.appendix}
 
-Sequencing data has been submitted to the NCBI Short Read Archive (SRA) database (https://www.ncbi.nlm.nih.gov/sra) under project number XXX. The data analysis script is available on Figshare (LINK)
+Sequencing data has been submitted to the NCBI Short Read Archive (SRA) database (https://www.ncbi.nlm.nih.gov/sra) under project number XXX. 
 
 ## Source Code {.appendix}
 
