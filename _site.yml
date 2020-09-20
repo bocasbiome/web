@@ -3,7 +3,7 @@ title: ""
 base_url: https://bocasbiome.github.io
 repository_url: https://github.com/bocasbiome/web/
 description: |
-  Hypocolypse
+  Bocasbiome
 output_dir: "public_build"
 exclude: ["rdata", "public", "public_build", "tables", "working"]
 creative_commons: CC BY
@@ -11,49 +11,32 @@ creative_commons: CC BY
 navbar:
   logo:
     image: assets/icon.png
-    text: "bocasbiome"
+    #text: "bocasbiome"
     href: index.html
-#  title: "Hypocolypse"
-  right:
-#    - text: "Home"
+  source_url: false
+  search: true
+  left:
     - icon: fa-home
       href: index.html
     - text: "1. Indicator Analysis"
-#      icon: fa-flask
       href: wf1.html
     - text: "2. Taxa by Sample Fraction"
-#      icon: fa-flask
       href: wf2.html
     - text: "3. Subset Fish"
-#      icon: fa-flask
       href: wf3.html
     - text: "4. Alpha Diversity"
-#      icon: fa-flask
       href: wf4.html
     - text: "5. Beta Diversity"
-#      icon: fa-flask
       href: wf5.html
     - text: "6. Beta Dispersion"
-#      icon: fa-flask
       href: wf6.html
     - text: "7. PIME Analysis"
-#      icon: fa-flask
       href: wf7.html
-#    - text: "Data"
-#      icon: fa-database
-#      href: data-availability.html
-#    - text: "SOM"
-#      icon:
-#      href: supplemental-material.html
-#    - icon: fa-code fa-lg
-#      href: raw_code.txt
-#    - text: "People"
-#      icon: fa-user-friends
-#      href: people.html
     - icon: fa-github fa-lg
       href: https://github.com/bocasbiome/web/
 output:
     distill::distill_article:
+      highlight_downlit: false
       css: assets/styles.css
       toc: true
       toc_depth: 2
