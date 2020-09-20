@@ -24,6 +24,7 @@ author:
     affiliation: Smithsonian Tropical Research Institute
 #    affiliation_url: https://example.com/spacelysprokets
   - name: Jarrod J. Scott
+    orcid_id: 0000-0001-9863-1318
 #    url: https://example.com/norajones
     affiliation: Smithsonian Tropical Research Institute
 #    affiliation_url: https://example.com/spacelysprokets
@@ -40,6 +41,7 @@ author:
     affiliation: Smithsonian Tropical Research Institute
 #    affiliation_url: https://example.com/spacelysprokets
   - name: Matthieu Leray
+    orcid_id: 0000-0002-7327-1878
 #    url: https://example.com/norajones
     affiliation: Smithsonian Tropical Research Institute
 #    affiliation_url: https://example.com/spacelysprokets

@@ -7,7 +7,7 @@ author:
 #    url: https://github.com/jjallaire
 #    affiliation: STRI
 #    affiliation_url: https://www.rstudio.com
-bibliography: assets/cite.bib
+#bibliography: assets/cite.bib
 ---
 
 ```{r setup, include=FALSE}
@@ -187,7 +187,7 @@ rank_names(ps.slv.tree.mbio.bocas)
 saveRDS(ps.slv.tree.mbio.bocas, "rdata/p1/ps_16S_bocas_unrar_all_ASVID_no_NA.rds")
 ```
 
-## Run Indicator Analysis to Identify Core Taxa
+## Indicator Analysis to Identify Core Taxa
 
 Now we can run the Indicator Analysis.
 
