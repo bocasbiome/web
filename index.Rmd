@@ -4,22 +4,27 @@ description: |
   *The gut microbiome stability of a butterflyfish is disrupted on severely degraded Caribbean reef habitats*.
 author:
   - name: Friederike Clever
+    orcid_id: 0000-0003-3434-6125
 #    url: https://example.com/norajones
     affiliation: Manchester Metropolitan University
 #    affiliation_url: https://example.com/spacelysprokets
   - name: Jade M. Sourisse
+    orcid_id: 0000-0001-9753-5236
 #    url: https://example.com/norajones
     affiliation: Swire Institute of Marine Science
 #    affiliation_url: https://example.com/spacelysprokets
   - name: Richard F. Preziosi
+    orcid_id: 0000-0003-0468-6655
 #    url: https://example.com/norajones
     affiliation: Manchester Metropolitan University
 #    affiliation_url: https://example.com/spacelysprokets
   - name: Jonathan A. Eisen
+    orcid_id: 0000-0002-0159-2197
 #    url: https://example.com/norajones
     affiliation: University of California, Davis
 #    affiliation_url: https://example.com/spacelysprokets
   - name: E. Catalina Rodriguez Guerra
+    orcid_id: 0000-0003-3394-5353
 #    url: https://example.com/norajones
     affiliation: Smithsonian Tropical Research Institute
 #    affiliation_url: https://example.com/spacelysprokets
@@ -29,14 +34,17 @@ author:
     affiliation: Smithsonian Tropical Research Institute
 #    affiliation_url: https://example.com/spacelysprokets
   - name: Laetitia G.E. Wilkins
+    orcid_id: 0000-0003-3632-2063
 #    url: https://example.com/norajones
     affiliation: University of California, Davis
 #    affiliation_url: https://example.com/spacelysprokets
   - name: Andrew H. Altieri
+    orcid_id: 0000-0001-7439-8742
 #    url: https://example.com/norajones
     affiliation: University of Florida
 #    affiliation_url: https://example.com/spacelysprokets
   - name: W. Owen McMillan
+    orcid_id: 0000-0003-2805-2745
 #    url: https://example.com/norajones
     affiliation: Smithsonian Tropical Research Institute
 #    affiliation_url: https://example.com/spacelysprokets
