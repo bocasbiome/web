@@ -112,7 +112,7 @@ This site provides reproducible workflows for the study on the gut microbiome of
 
 ## Credits {.appendix}
 
-The banner photo, entitled **Butterfly-fish, *Chaetodon capistratus* Linnaeus**, by [David Starr Jordan](https://en.wikipedia.org/wiki/en:David_Starr_Jordan) (1851–1931) was retreived from Wikimedia Commons ([original](https://upload.wikimedia.org/wikipedia/commons/b/b4/FMIB_52079_Butterfly-fish%2C_Chaetodon_capistratus_Linnaeus_Jamaica.jpeg)) and licenced under [CC-0](https://creativecommons.org/share-your-work/public-domain/cc0). The image is part of the [Freshwater and Marine Image Bank](https://content.lib.washington.edu/fishweb/index.html) at the University of Washington. 
+The banner photo, entitled **Butterfly-fish, *Chaetodon capistratus* Linnaeus**,  was retrieved from Wikimedia Commons and licensed under [CC-0](https://creativecommons.org/share-your-work/public-domain/cc0). The image is part of the [Freshwater and Marine Image Bank](https://content.lib.washington.edu/fishweb/index.html) at the University of Washington. 
 
 ## Acknowledgements {.appendix}
 
