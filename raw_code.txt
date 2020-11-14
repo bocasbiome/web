@@ -1,0 +1,3378 @@
+# Please note this is all the raw R code pulled from all the `.Rmd` files. 
+# This code is for analyzing the 16s rRNA data 
+
+# Use at your own risk as this has not been tested independent of the Rmarkdown 
+# workflows. In other words, the code works in the Rmarkdown format but the 
+# complete pipeline has not been tested using just this code. I used `knitr::purl()` 
+# to pull out the R code from the Rmarkdown file. 
+
+# Commands that are commented out are things I tried that I could never get to work. 
+# Any line that starts like this: `##----` is the code chuck name and details. 
+
+
+#############################
+##
+## No 1. Indicator Analysis
+##
+#############################
+
+##----setup, include=FALSE------------------------------------------------------
+library(tidyverse)
+library(phyloseq)
+library(microbiome)
+library(ggpubr)
+library(labdsv) #for indicator analysis
+require(gdata)
+library(scales)
+library(patchwork)
+library(DT)
+library(cowplot)
+library(plyr)
+library(data.table)
+library(pairwiseAdonis)
+library(ggpubr)
+library(GUniFrac)
+library(ade4)
+library(ape)
+library(vegan)
+library(hilldiv)
+library(GUniFrac) #generalized unifrac
+options(scipen=999)
+knitr::opts_chunk$set(echo = TRUE)
+
+
+##----master_load, include=FALSE------------------------------------------------
+remove(list = ls())
+#This can only be used AFTER the workflow is finished.
+#Load the output to run all of the inline code, etc
+#!!! MUST CLEAR MEMORY!!!
+##ls.str(ex)
+load("rdata/p1/bocasbiome_p1.rdata")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+ps.slv.tree.mbio.bocas <- readRDS("rdata/p1/ps_16S_capis_bocas_all_unrar.rds")
+ps.slv.tree.mbio.bocas
+
+
+##---- echo=FALSE---------------------------------------------------------------
+ps.slv.tree.mbio.bocas
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+elementId need to be unique https://www.random.org/strings/
+sample_table <- data.frame(sample_data(ps.slv.tree.mbio.bocas))
+sample_table <- sample_table %>% tibble::rownames_to_column("Sample_ID")
+sample_table$Sample <- NULL
+
+
+##---- echo=FALSE, layout="l-page"----------------------------------------------
+datatable(sample_table, width = "100%", escape = FALSE,
+          rownames = FALSE, filter = 'top',
+          caption = htmltools::tags$caption(
+            style = 'caption-side: bottom; text-align: left;',
+            'Table: ', htmltools::em('Sample  summary table. Use the buttons to
+            navigate through the table or download a copy.')),
+          elementId = "nsuxann9l3fmx3yh74pu",
+          extensions = 'Buttons', options = list(
+            scrollX = TRUE,
+            dom = 'Blfrtip',
+            buttons = c('copy', 'csv', 'excel'),
+            pageLength = 5,
+            lengthMenu = list(c(5, 10, 50, -1), c("5", "10", "50", "All"))
+            )
+          ) %>%
+  DT::formatStyle(columns = colnames(sample_table), fontSize = '80%')
+
+
+##---- eval=FALSE---------------------------------------------------------------
+tax_table(ps.slv.tree.mbio.bocas) <- cbind(tax_table(ps.slv.tree.mbio.bocas),
+                                           rownames(tax_table(ps.slv.tree.mbio.bocas)))
+
+colnames(tax_table(ps.slv.tree.mbio.bocas)) <-
+        c("Kingdom", "Phylum", "Class",
+          "Order", "Family", "Genus", "ASV")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+taxa_names(ps.slv.tree.mbio.bocas) <- 1:ntaxa(ps.slv.tree.mbio.bocas)
+taxa_names(ps.slv.tree.mbio.bocas) <- paste("ASV_",
+                                            taxa_names(ps.slv.tree.mbio.bocas),
+                                            sep = "") #JJS# Changed
+
+
+##---- eval=FALSE---------------------------------------------------------------
+tax.unrar.bocas.all <- data.frame(tax_table(ps.slv.tree.mbio.bocas))
+tax.unrar.new <- data.frame(ASV_ID = row.names(tax.unrar.bocas.all),
+                            tax.unrar.bocas.all)
+tax.unrar.new <- tax.unrar.new[, c(2,3,4,5,6,7,1,8)]
+tax.unrar.new2 <- as.matrix(tax.unrar.new)
+ps.slv.tree.mbio.bocas <- merge_phyloseq(otu_table(ps.slv.tree.mbio.bocas),
+                                         tax_table(tax.unrar.new2),
+                                         sample_data(ps.slv.tree.mbio.bocas),
+                                         phy_tree(ps.slv.tree.mbio.bocas))
+saveRDS(ps.slv.tree.mbio.bocas, "rdata/p1/ps_16S_bocas_unrar_all_ASVID.rds")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+ps.slv.tree.mbio.bocas_o <- ps.slv.tree.mbio.bocas
+
+
+##---- eval=FALSE---------------------------------------------------------------
+tax.clean <- data.frame(tax_table(ps.slv.tree.mbio.bocas))
+for (i in 1:6){ tax.clean[,i] <- as.character(tax.clean[,i])}
+tax.clean[is.na(tax.clean)] <- ""
+
+for (i in 1:nrow(tax.clean)){
+    if (tax.clean[i,2] == ""){
+        kingdom <- base::paste("k", tax.clean[i,1], sep = "_")
+        tax.clean[i, 2:6] <- kingdom
+    } else if (tax.clean[i,3] == ""){
+        phylum <- base::paste("p", tax.clean[i,2], sep = "_")
+        tax.clean[i, 3:6] <- phylum
+    } else if (tax.clean[i,4] == ""){
+        class <- base::paste("c", tax.clean[i,3], sep = "_")
+        tax.clean[i, 4:6] <- class
+    } else if (tax.clean[i,5] == ""){
+        order <- base::paste("o", tax.clean[i,4], sep = "_")
+        tax.clean[i, 5:6] <- order
+    } else if (tax.clean[i,6] == ""){
+        tax.clean$Genus[i] <- base::paste("f",tax.clean$Family[i], sep = "_")
+        }
+}
+rm(class, order, phylum, kingdom)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+tax.clean <- tax.clean %>% unite("ASV_IDa", Genus:ASV_ID,
+                                 remove = FALSE, sep = "_")
+tax.clean <- tax.clean %>% unite("ASV_IDb", ASV_ID:Genus,
+                                 remove = FALSE, sep = "_")
+tax.clean <- tax.clean[, c(1,2,3,4,5,8,9,6,7,10)]
+tax.clean$ASV_IDa <-
+  str_replace_all(tax.clean$ASV_IDa,
+                  'Clostridium_sensu_stricto_[0-9]',
+                  'Clostridium')
+tax.clean$ASV_IDb <-
+  str_replace_all(tax.clean$ASV_IDb,
+                  'Clostridium_sensu_stricto_[0-9]',
+                  'Clostridium')
+tax.clean$ASV_IDc <- tax.clean$ASV_IDa
+tax.clean$ASV_IDc <-
+  str_replace_all(tax.clean$ASV_IDc,
+                  '_ASV', '')
+tax.clean <- tax.clean[, c(1,2,3,4,5,6,7,8,9,11,10)]
+write.csv(tax.clean, "tables/p1/tax_all_new_no_na.csv")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+tax_table(ps.slv.tree.mbio.bocas) <- as.matrix(tax.clean)
+rank_names(ps.slv.tree.mbio.bocas)
+saveRDS(ps.slv.tree.mbio.bocas, "rdata/p1/ps_16S_bocas_unrar_all_ASVID_no_NA.rds")
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+##########################
+DO NOT RUN
+##########################
+
+#JJS# Modified This code is not run
+# See next chunk
+
+##########################
+Original Code
+##########################
+library(labdsv)
+
+fish gut fraction versus environmental fraction
+create a dataframe from the otu table
+data.IndVal.env.fish <- data.frame(otu_table(ps.slv.tree.mbio.bocas))
+data.IndVal.env.fish
+inspect in excel
+write.csv(data.IndVal.env.fish, file = "tables/p1/indval_core_data_new.csv")
+pull out data
+check nr of taxa
+ntaxa(ps.slv.tree.mbio.bocas)
+ASV.only <- data.IndVal.env.fish[,1:10711]  #won't remove first column with sample names! Als not when do [,2:10712]
+command above did not remove the first column containing sample names
+remove first column manually:
+write.csv(ASV.only,file = "tables/p1/ASV_only_indval.csv")
+data.IndVal.ASV <- read.csv("tables/p1/ASV_only_indval.csv", header=TRUE)
+
+create group data sheet for indVal in excel
+to identify indicator species based on 'Status' (=Group) i.e. Environment=Group1, Fish=Group2
+read in group assignment data
+data.IndVal.group <- read.csv("tables/p1/Group_env_fish_new.csv")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+data.IndVal.env.fish <- data.frame(otu_table(ps.slv.tree.mbio.bocas))
+data.IndVal.env.fish
+data.IndVal.ASV <- tibble::remove_rownames(data.IndVal.env.fish)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+data.IndVal.group <- data.frame(sample_data(ps.slv.tree.mbio.bocas)) %>%
+  select(Fraction)
+data.IndVal.group$Status <- data.IndVal.group$Fraction
+data.IndVal.group <- data.IndVal.group[, c(2,1)]
+data.IndVal.group$Status <- str_replace(data.IndVal.group$Status, "Environment", "1")
+data.IndVal.group$Status <- str_replace(data.IndVal.group$Status, "Fish", "2")
+data.IndVal.group <- tibble::rownames_to_column(data.IndVal.group, "Label")
+data.IndVal.group$Status <-  as.integer(data.IndVal.group$Status)
+data.IndVal.group$Fraction <-  as.character(data.IndVal.group$Fraction)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1280)
+iva <- indval(data.IndVal.ASV, data.IndVal.group$Status)
+#Table of the significant indicator species at p= 0.01
+gr <- iva$maxcls[iva$pval <= 0.01]
+iv <- iva$indcls[iva$pval <= 0.01]
+pv <- iva$pval[iva$pval <= 0.01]
+fr <- apply(data.IndVal.ASV > 0, 2, sum)[iva$pval <= 0.01]
+indval.out <- data.frame(group = gr, indval = iv, pval = pv, freq = fr)
+indval.out <- indval.out[order(indval.out$group, -indval.out$indval),]
+indval.out
+write.csv(indval.out,
+          file = "tables/p1/IndVal_microbiome_env_fish_output_p01_new0.csv")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+indval.out.prob.corrected = p.adjust(indval.out$pval, "bonferroni")
+write.csv(indval.out.prob.corrected,
+          file = "tables/p1/IndVal_microbiome_env_fish_bonf_new0.csv")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+fish_ind_asvs <- indval.out[indval.out$group == 2, ]
+fish_ind_asvs_list <- row.names(fish_ind_asvs)
+ps.indv.core.01 <- subset_taxa(ps.slv.tree.mbio.bocas,
+                               rownames(tax_table(ps.slv.tree.mbio.bocas)) %in%
+                                       fish_ind_asvs_list)
+ps.indv.core.01
+
+
+##---- eval=FALSE---------------------------------------------------------------
+ps.indv.core.fish <- subset_samples(ps.indv.core.01, Fraction == "Fish")
+sample_data(ps.indv.core.fish)
+tax.core <- tax_table(ps.indv.core.fish)
+
+write.csv(tax.core, file = "tables/p1/tax_indVal_core.csv")
+tax_core_mod <- read.csv("tables/p1/tax_indVal_core.csv", header = TRUE, row.names = 1)
+tax_core_mod2 <- as.matrix(tax_core_mod)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+ps.indv.core.fish <- merge_phyloseq(otu_table(ps.indv.core.fish),
+                                    tax_table(tax_core_mod2),
+                                    sample_data(ps.indv.core.fish),
+                                    phy_tree(ps.indv.core.fish))
+saveRDS(ps.indv.core.fish, "rdata/p1/ps_indv01_core_fish.rds")
+ps.indv.core.fish <- readRDS("rdata/p1/ps_indv01_core_fish.rds")
+
+
+##---- echo=FALSE---------------------------------------------------------------
+ps.indv.core.fish
+
+
+##----calculate_stats_ps, echo=FALSE, eval=FALSE--------------------------------
+min_read_ps <- min(readcount(ps.indv.core.fish))
+max_read_ps <- max(readcount(ps.indv.core.fish))
+total_reads_ps <- sum(readcount(ps.indv.core.fish))
+mean_reads_ps <- round(mean(readcount(ps.indv.core.fish)), digits = 0)
+median_reads_ps <- median(readcount(ps.indv.core.fish))
+total_asvs_ps <- ntaxa(ps.indv.core.fish)
+singleton_ps <- tryCatch(ntaxa(rare(ps.indv.core.fish,
+                                    detection = 1, prevalence = 0)),
+                         error=function(err) NA)
+singleton_ps_perc <- tryCatch(round((100*(ntaxa(rare(ps.indv.core.fish,
+                                                     detection = 1,
+                                                     prevalence = 0)) / ntaxa(ps))),
+                                    digits = 3),
+                              error=function(err) NA)
+sparsity_ps <- round(length(which(
+  abundances(ps.indv.core.fish) == 0))/length(abundances(ps.indv.core.fish)),
+  digits = 3)
+
+
+##---- echo=FALSE, eval=FALSE---------------------------------------------------
+tax_core_mod3 <- data.frame(tax_core_mod2) %>% tibble::rownames_to_column("ID")
+indval.out1 <- data.frame(indval.out) %>% tibble::rownames_to_column("ID")
+indval_table <- dplyr::left_join(tax_core_mod3, indval.out1, by = "ID")
+indval_table[,8:13] <- list(NULL)
+
+
+##---- echo=FALSE, layout="l-page"----------------------------------------------
+datatable(indval_table, width = "100%", escape = FALSE,
+          rownames = FALSE, filter = 'top',
+          caption = htmltools::tags$caption(
+            style = 'caption-side: bottom; text-align: left;',
+            'Table: ', htmltools::em('InVal  summary table. Use the buttons to
+            navigate through the table or download a copy.')),
+          elementId = "nsuxann9l3fmx3yh74pu",
+          extensions = 'Buttons', options = list(
+            scrollX = TRUE,
+            dom = 'Blfrtip',
+            buttons = c('copy', 'csv', 'excel'),
+            pageLength = 5,
+            lengthMenu = list(c(5, 10, -1), c("5", "10", "All"))
+            )
+          ) %>%
+  DT::formatStyle(columns = colnames(indval_table), fontSize = '80%') %>%
+  DT::formatRound(columns = c("indval", "pval"), digits = 3)
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+#sample_data(ps.indv.core.fish)
+manually modify tax table for plotting adding names to ASV IDs
+#tax.core <- tax_table(ps.indv.core.fish) #JJS# removed
+#write.csv(tax.core, file = "tax_indVal_core.csv") #JJS# removed
+#tax_core_mod <- read.csv("tax_indVal_core.csv", header = TRUE, row.names = 1) #JJS# removed
+#tax_core_mod2 <- as.matrix(tax_core_mod)
+#add the modified tax table to ps object
+#ps.indv.core.fish<-merge_phyloseq(otu_table(ps.indv.core.fish), tax_table(tax_core_mod2),sample_data(ps.indv.core.fish), phy_tree(ps.indv.core.fish))
+#ps.indv.core.fish
+save ps object
+#saveRDS(ps.indv.core.fish, "rdata/p1/ps_indv01_core_fish.rds")#this contains all identified ASVs with Indicator analysis at 0.01
+#ps.indv.core.fish <- readRDS("rdata/p1/ps_indv01_core_fish.rds")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+ASV_colors <- c(
+        "mediumaquamarine","darkcyan", "darkseagreen2",
+        "springgreen4", "lightseagreen","aquamarine2",
+        "turquoise", "aquamarine","aquamarine4", "darkseagreen4",
+        "dodgerblue1","dodgerblue3", "lightsalmon3", "coral",
+        "coral2","darksalmon","lightsalmon","coral3", "salmon3" ,
+        "indianred", "indianred2","salmon2", "salmon","lightsalmon4",
+        "lavender","darkslategrey","plum3")
+
+level_order <- c('Outer bay',
+                 'Inner bay',
+                 'Inner bay disturbed')
+level_order2 <- c('SCR', 'PPR', 'CCR', 'ALR',
+                  'SIS','ROL','RNW', 'PST', 'PBL')
+asv_order <- rev(c("ASV_95", "ASV_589", "ASV_2", "ASV_25", "ASV_18",
+               "ASV_15", "ASV_14", "ASV_94", "ASV_30", "ASV_10",
+               "ASV_9", "ASV_24", "ASV_74", "ASV_19", "ASV_39",
+               "ASV_41", "ASV_27", "ASV_7", "ASV_68", "ASV_6",
+               "ASV_59", "ASV_5", "ASV_3", "ASV_17", "ASV_163",
+               "ASV_11", "ASV_1"))
+
+
+##---- eval=FALSE---------------------------------------------------------------
+capis.core <- ps.indv.core.fish %>%
+        tax_glom(taxrank = "ASV_IDa") %>%
+        transform_sample_counts(function(x) {x/sum(x)} ) %>%
+        psmelt() %>%
+        filter(Abundance > 0.00) %>%
+        arrange(ASV_IDa)
+capis.core$ASV_ID <- gdata::reorder.factor(capis.core$ASV_ID, new.order = asv_order)
+capis.core <- capis.core %>% dplyr::arrange(ASV_ID)
+capis.core$ASV_IDa <- factor(capis.core$ASV_IDa, levels = unique(capis.core$ASV_IDa))
+levels(capis.core$ASV_IDa)
+attributes(capis.core$ASV_IDa)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+fig01 <- ggplot(capis.core, aes(x = factor(Zone, level = level_order),
+                                y = Abundance, fill = ASV_IDa)) +
+        geom_bar(stat = "identity", position = "fill") +
+        scale_fill_manual(values = ASV_colors) +
+        scale_x_discrete("Zone", expand = waiver(),
+                         position = "bottom", drop = FALSE) +
+        guides(fill = guide_legend(reverse = TRUE,
+                                   keywidth = 1,
+                                   keyheight = 1,
+                                   title="ASV ID")) + #JJS# added new title
+        ylab("") +
+        ggtitle("", subtitle = "Core across zones") +
+        theme(plot.title = element_text(size = 18)) +
+        theme(plot.subtitle = element_text(size = 16)) +
+        theme_cowplot()
+
+
+##---- eval=FALSE---------------------------------------------------------------
+fig02 <-
+        ggplot(capis.core, aes(x = Species, y = Abundance, fill = ASV_IDa)) +
+        geom_bar(stat = "identity", position = "fill") +
+        scale_fill_manual(values = ASV_colors) +
+        scale_x_discrete("", expand = waiver(),
+                         position = "bottom", drop = FALSE) +
+        guides(fill = guide_legend(reverse = TRUE,
+                                   keywidth = 1,
+                                   keyheight = 1,
+                                   title = "ASV ID")) + #JJS# added new title
+        ylab("Relative Abundance (ASV)") +
+        ggtitle("Fish gut core microbiome", subtitle = "") +
+        theme(plot.title = element_text(size = 18)) +
+        theme_cowplot()
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+FOr Saving##
+png("figures/p1/Core_2bars.png", height = 18, width = 36,
+    units = 'cm', res = 600, bg = "white")
+fig <- ggarrange(fig02, fig01, ncol = 2, common.legend = TRUE,
+                 legend = "bottom", labels = c("A", "B"))
+fig
+dev.off()
+tiff("figures/p1/Core_2bars.tiff", height = 18, width = 36, units = 'cm',
+     compression = "lzw", res = 600, bg = 'white')
+fig
+dev.off()
+pdf("figures/p1/Core_2bars.pdf", height = 8, width = 16)
+fig
+dev.off()
+
+
+##---- echo=FALSE, eval=FALSE---------------------------------------------------
+fig01_mod <- fig01
+fig02_mod <- fig02
+fig01_mod <- fig01_mod + ggtitle("", subtitle = "")
+fig02_mod <- fig02_mod + ggtitle("", subtitle = "") +
+  theme(axis.text.x = element_text(face = "italic"))
+p_filt_plots <-  fig02_mod + fig01_mod
+p_filt_plots <-  p_filt_plots +
+  plot_annotation(tag_levels = 'A',
+                  title = 'Core Microbiomes',
+                  #subtitle = 'Top 40 taxa of filtered data',
+                  caption = 'A) Fish gut core microbiome,
+                  B) Core across zones') +
+  plot_layout(widths = c(1, 3), guides = "collect") &
+  theme(plot.title = element_text(size = 10),
+        plot.tag = element_text(size = 10),
+        legend.position = "bottom",
+        legend.text = element_text(size = 6),
+        legend.title = element_text(size = 8),
+        axis.text.x = element_text(size = 8),
+        axis.text.y = element_text(size = 8),
+        axis.title.x = element_text(size = 10),
+        axis.title.y = element_text(size = 10)) &
+  guides(fill = guide_legend(reverse = FALSE,
+                             keywidth = 0.4,
+                             keyheight = 0.4,
+                             title = "ASV ID", nrow = 7))
+
+
+##---- echo=FALSE, fig.height=5, layout='l-page'--------------------------------
+p_filt_plots
+
+
+##---- include=FALSE, eval=FALSE------------------------------------------------
+save.image("rdata/p1/bocasbiome_p1.rdata")
+remove(list = ls())
+
+#############################
+##
+## No 2. Comparing Sample Fractions
+##
+#############################
+
+##----setup, include=FALSE------------------------------------------------------
+library(tidyverse)
+library(phyloseq)
+library(microbiome)
+library(ggpubr)
+library(labdsv)
+require(gdata)
+library(scales)
+library(patchwork)
+library(DT)
+library(cowplot)
+library(plyr)
+library(data.table)
+library(pairwiseAdonis)
+library(ggpubr)
+library(GUniFrac)
+library(ade4)
+library(ape)
+library(vegan)
+library(hilldiv)
+library(GUniFrac)
+options(scipen=999)
+knitr::opts_chunk$set(echo = TRUE)
+
+
+##---- include=FALSE------------------------------------------------------------
+remove(list = ls())
+#This can only be used AFTER the workflow is finished.
+#Load the output to run all of the inline code, etc
+#!!! MUST CLEAR MEMORY!!!
+##ls.str(ex)
+load("rdata/p2/bocasbiome_p2_filt.rdata")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+ps.slv.tree.mbio.rar.bocas <- readRDS("rdata/p2/ps_16S_capis_bocas_all_rar.rds")
+
+
+##------------------------------------------------------------------------------
+any(taxa_sums(ps.slv.tree.mbio.rar.bocas) == 0)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+tax_table(ps.slv.tree.mbio.rar.bocas) <-
+  cbind(
+    tax_table(ps.slv.tree.mbio.rar.bocas),
+    rownames(tax_table(ps.slv.tree.mbio.rar.bocas)))
+
+colnames(tax_table(ps.slv.tree.mbio.rar.bocas)) <-
+        c("Kingdom", "Phylum", "Class",
+          "Order", "Family", "Genus", "ASV")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+taxa_names(ps.slv.tree.mbio.rar.bocas) <- 1:ntaxa(ps.slv.tree.mbio.rar.bocas)
+taxa_names(ps.slv.tree.mbio.rar.bocas) <-
+  paste("ASV_", taxa_names(ps.slv.tree.mbio.rar.bocas),
+        sep = "")
+head(taxa_names(ps.slv.tree.mbio.rar.bocas))
+
+
+##---- echo=FALSE---------------------------------------------------------------
+head(taxa_names(ps.slv.tree.mbio.rar.bocas))
+
+
+##---- eval=FALSE---------------------------------------------------------------
+tax.rar.bocas.all <- data.frame(tax_table(ps.slv.tree.mbio.rar.bocas))
+tax.rar.new <- data.frame(ASV_ID = row.names(tax.rar.bocas.all),
+                            tax.rar.bocas.all)
+tax.rar.new <- tax.rar.new[, c(2,3,4,5,6,7,1,8)]
+tax.rar.new2 <- as.matrix(tax.rar.new)
+
+ps.slv.tree.mbio.rar.bocas <- merge_phyloseq(
+  otu_table(ps.slv.tree.mbio.rar.bocas),
+  tax_table(tax.rar.new2),
+  sample_data(ps.slv.tree.mbio.rar.bocas),
+  phy_tree(ps.slv.tree.mbio.rar.bocas))
+
+ps.slv.tree.mbio.rar.bocas
+head(tax_table(ps.slv.tree.mbio.rar.bocas))
+saveRDS(ps.slv.tree.mbio.rar.bocas,"rdata/p2/ps_16S_bocas_rar_all_ASVID.rds")
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+##ps.slv.tree.mbio.rar.bocas <- readRDS("rdata/p2/ps_16S_bocas_rar_all_ASVID.rds")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+Fractions_phylum <- ps.slv.tree.mbio.rar.bocas %>%
+        tax_glom(taxrank = "Phylum") %>%
+        transform_sample_counts(function(x) {x/sum(x)} ) %>%
+        psmelt() %>%
+        filter(Abundance > 0.05) %>%
+        arrange(Phylum)
+
+Fractions_genus <- ps.slv.tree.mbio.rar.bocas %>%
+        tax_glom(taxrank = "Genus") %>%
+        transform_sample_counts(function(x) {x/sum(x)} ) %>%
+        psmelt() %>%
+        filter(Abundance > 0.05) %>%
+        arrange(Genus)
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+level_order <- c('Fish', 'Algae', 'Coral', 'Softcoral',
+                 'Sponge','Sponge_infauna','Zoanthus',
+                 'Water')
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+font_theme = theme(
+        axis.title.x = element_text(size = 14),
+        axis.text.x = element_text(size = 8),
+        axis.title.y = element_text(size = 14),
+        axis.text.y = element_text(size = 8))
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+colvec.phylum <- c(
+        "seagreen2", "grey", "tomato4", "lightsalmon3", "gold4", "skyblue",
+        "papayawhip", "darksalmon", "steelblue", "burlywood3", "darkseagreen",
+        "thistle3", "powderblue", "chocolate4", "pink")
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+colvec.genus <- c(
+         "seagreen2", "lightgrey", "tomato3", "coral1", "darkolivegreen4",
+         "mistyrose", "burlywood", "lightsalmon", "snow2", "powderblue",
+         "darksalmon", "pink3", "skyblue", "lightsalmon4", "thistle3",
+         "lightsalmon3", "peachpuff3", "chocolate4", "darkmagenta", "maroon",
+         "papayawhip", "seagreen1", "deepskyblue4", "darkseagreen",
+         "mediumaquamarine", "deeppink3", "aquamarine3", "skyblue4",
+         "darkorange3", "hotpink", "yellow1", "salmon", "darkseagreen2",
+         "lightblue4", "plum1", "burlywood", "steelblue", "tomato", "seagreen2",
+         "tomato2", "lightgoldenrod3", "gold4", "thistle4", "darkolivegreen4",
+         "indianred4", "blue", "lavender", "lightskyblue", "mediumpurple3",
+         "lightgoldenrod", "goldenrod", "lightseagreen", "lightcoral",
+         "thistle3", "powderblue", "chocolate4", "pink"
+)
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+fig00 <-
+        ggplot(Fractions_genus, aes(x = factor(Fraction_delailed,
+                                               level = level_order),
+                                    y = Abundance, fill = Genus)) +
+        geom_bar(stat = "identity", position = "fill") +
+        scale_fill_manual(values = colvec.genus) +
+        scale_x_discrete("Sample", expand = waiver(), position = "bottom",
+                         #breaks = c("7/8", "8/4", "9/2", "10/6"),
+                         #labels = c("ALR", "CCR", "PBL", "PPR", "PST", "RNW", "ROL", "SCR", "SIS"),
+                         drop = FALSE) +
+        theme_cowplot() +
+        font_theme +
+        guides(fill = guide_legend(reverse = TRUE,
+                                   keywidth = 1, keyheight = 1)) +
+        ylab("Relative Abundance (Genus > 5%)") +
+        ggtitle("All sample fractions\nGenus") +
+        theme(panel.grid.major = element_blank(),
+              panel.grid.minor = element_blank(),
+              panel.background = element_rect(fill = "transparent", colour = NA),
+              plot.background = element_rect(fill = "transparent", colour = NA),
+              panel.border = element_rect(fill = NA, color = "black"))
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+fig01 <-
+        ggplot(Fractions_phylum, aes(x = factor(Fraction_delailed,
+                                                level = level_order),
+                                     y = Abundance, fill = Phylum)) +
+        geom_bar(stat = "identity", position = "fill") +
+        scale_fill_manual(values = colvec.phylum) +
+        scale_x_discrete("Fraction", expand = waiver(), position = "bottom",
+                         drop = FALSE) +
+        theme_cowplot() +
+        font_theme +
+        guides(fill = guide_legend(reverse = TRUE,
+                                   keywidth = 1, keyheight = 1)) +
+        ylab("Relative Abundance (Phylum > 5%)") +
+        ggtitle("All sample fractions\nPhylum") +
+        theme(panel.grid.major = element_blank(),
+              panel.grid.minor = element_blank(),
+              panel.background = element_rect(fill = "transparent", colour = NA),
+              plot.background = element_rect(fill = "transparent", colour = NA),
+              panel.border = element_rect(fill = NA, color = "black"))
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+png("figures/p2/All_Fractions_double.png", height = 14, width = 28,
+    units = 'cm', res = 600, bg = "white")
+fig <- ggarrange(fig01, fig00, ncol = 1,labels = c("A", "B"))
+fig
+dev.off()
+
+fig
+pdf("figures/p2/All_Fractions_double.pdf", height = 12, width = 16)
+fig
+dev.off()
+
+
+##---- echo=FALSE, fig.height=4, layout='l-body-outset', eval=FALSE, echo=FALSE----
+fig00_mod <- fig00
+fig01_mod <- fig01
+fig01_mod <- fig01_mod + ggtitle("All Samples Fraction", subtitle = "Phylum") +
+  theme(axis.title.x = element_text(size = 14),
+        axis.text.x = element_text(size = 8),
+        axis.title.y = element_text(size = 10),
+        axis.text.y = element_text(size = 8),
+        legend.text = element_text(size = 10),
+        plot.title = element_text(size = 12)) +
+  guides(fill = guide_legend(reverse = TRUE,
+                             keywidth = 0.6, keyheight = 0.6))
+fig00_mod <- fig00_mod + ggtitle("All Samples Fraction", subtitle = "Genus") +
+  theme(axis.title.x = element_text(size = 14),
+        axis.text.x = element_text(size = 8),
+        axis.title.y = element_text(size = 10),
+        axis.text.y = element_text(size = 8),
+        legend.text = element_text(size = 10),
+        plot.title = element_text(size = 12)) +
+  guides(fill = guide_legend(reverse = TRUE,
+                             keywidth = 0.6, keyheight = 0.6))
+
+
+##---- echo=FALSE, fig.height=4, layout='l-body-outset', eval=FALSE-------------
+ggarrange(fig01_mod, fig00_mod, ncol = 1, labels = c("A", "B"))
+
+
+##---- echo=FALSE, warning=FALSE, fig.height=5, layout='l-page'-----------------
+knitr::include_graphics("figures/p2/All_Fractions_double-1.png")
+
+
+##---- include=FALSE, eval=FALSE------------------------------------------------
+save.image("rdata/p2/bocasbiome_p2_filt.rdata")
+remove(list = ls())
+
+
+##---- include=FALSE------------------------------------------------------------
+remove(list = ls())
+#This can only be used AFTER the workflow is finished.
+#Load the output to run all of the inline code, etc
+#!!! MUST CLEAR MEMORY!!!
+##ls.str(ex)
+load("rdata/p2/bocasbiome_p2_all.rdata")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+ps.slv.tree.mbio.rar.bocas_no_na <- readRDS("rdata/p2/ps_16S_bocas_rar_all_ASVID.rds")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+tax.clean <- data.frame(tax_table(ps.slv.tree.mbio.rar.bocas_no_na))
+for (i in 1:6){ tax.clean[,i] <- as.character(tax.clean[,i])}
+tax.clean[is.na(tax.clean)] <- ""
+
+for (i in 1:nrow(tax.clean)){
+    if (tax.clean[i,2] == ""){
+        kingdom <- base::paste("k", tax.clean[i,1], sep = "_")
+        tax.clean[i, 2:6] <- kingdom
+    } else if (tax.clean[i,3] == ""){
+        phylum <- base::paste("p", tax.clean[i,2], sep = "_")
+        tax.clean[i, 3:6] <- phylum
+    } else if (tax.clean[i,4] == ""){
+        class <- base::paste("c", tax.clean[i,3], sep = "_")
+        tax.clean[i, 4:6] <- class
+    } else if (tax.clean[i,5] == ""){
+        order <- base::paste("o", tax.clean[i,4], sep = "_")
+        tax.clean[i, 5:6] <- order
+    } else if (tax.clean[i,6] == ""){
+        tax.clean$Genus[i] <- base::paste("f",tax.clean$Family[i], sep = "_")
+        }
+}
+rm(class, order, phylum, kingdom)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+tax.clean <- tax.clean %>% unite("ASV_IDa", Genus:ASV_ID,
+                                 remove = FALSE, sep = "_")
+tax.clean <- tax.clean %>% unite("ASV_IDb", ASV_ID:Genus,
+                                 remove = FALSE, sep = "_")
+tax.clean <- tax.clean[, c(1,2,3,4,5,8,9,6,7,10)]
+tax.clean$ASV_IDa <-
+  str_replace_all(tax.clean$ASV_IDa,
+                  'Clostridium_sensu_stricto_[0-9]',
+                  'Clostridium')
+tax.clean$ASV_IDb <-
+  str_replace_all(tax.clean$ASV_IDb,
+                  'Clostridium_sensu_stricto_[0-9]',
+                  'Clostridium')
+tax.clean$ASV_IDc <- tax.clean$ASV_IDa
+tax.clean$ASV_IDc <-
+  str_replace_all(tax.clean$ASV_IDc,
+                  '_ASV', '')
+tax.clean <- tax.clean[, c(1,2,3,4,5,6,7,8,9,11,10)]
+write.csv(tax.clean, "tables/p2/tax_rar_new_no_na.csv")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+tax_table(ps.slv.tree.mbio.rar.bocas_no_na) <- as.matrix(tax.clean)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+rank_names(ps.slv.tree.mbio.rar.bocas_no_na)
+saveRDS(ps.slv.tree.mbio.rar.bocas_no_na, "rdata/p2/ps_16S_bocas_rar_all_ASVID_no_NA.rds")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+##############################
+#UNCOMMENT CODE TO RUN ####
+##############################
+#proteo <- subset_taxa(ps.slv.tree.mbio.rar.bocas_no_na, Phylum=="Proteobacteria")
+#get_taxa_unique(proteo, taxonomic.rank = rank_names(proteo)[3], errorIfNULL=TRUE)
+#ps.rar.no.na.proteo <- ps.slv.tree.mbio.rar.bocas_no_na
+#tax.clean2 <- data.frame(tax_table(ps.rar.no.na.proteo))
+#for (i in 1:nrow(tax.clean2)){
+#    if (tax.clean2[i,2] == "Proteobacteria" & tax.clean2[i,3] == "Alphaproteobacteria"){
+#        phylum <- paste("Alphaproteobacteria")
+#        tax.clean2[i, 2] <- phylum
+#}   else if (tax.clean2[i,2] == "Proteobacteria" & tax.clean2[i,3] == "Gammaproteobacteria"){
+#        phylum <- paste("Gammaproteobacteria")
+#        tax.clean2[i, 2] <- phylum
+#}   else if (tax.clean2[i,2] == "Proteobacteria" & tax.clean2[i,3] == "Deltaproteobacteria"){
+#        phylum <- paste("Deltaproteobacteria")
+#        tax.clean2[i, 2] <- phylum
+#}   else if (tax.clean2[i,2] == "Proteobacteria" & tax.clean2[i,3] == "p_Proteobacteria"){
+#        phylum <- paste("unc_Proteobacteria")
+#        tax.clean2[i, 2] <- phylum
+#   }
+#}
+#tax_table(ps.rar.no.na.proteo) <- as.matrix(tax.clean2)
+#rank_names(ps.rar.no.na.proteo)
+#rm(class, order, phylum, kingdom)
+#get_taxa_unique(ps.rar.no.na.proteo,
+#                taxonomic.rank = rank_names(ps.rar.no.na.proteo)[2],
+#                errorIfNULL=TRUE)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+ps.rar.bocas_agg_phy <- aggregate_top_taxa(ps.slv.tree.mbio.rar.bocas_no_na,
+                                           top = 15, level = "Phylum")
+ps.rar.bocas_agg_phy
+get_taxa_unique(ps.rar.bocas_agg_phy,
+                taxonomic.rank = rank_names(ps.rar.bocas_agg_phy)[2],
+                errorIfNULL = TRUE)
+
+ps.rar.bocas_agg_gen <- aggregate_top_taxa(ps.slv.tree.mbio.rar.bocas_no_na,
+                                           top = 57, level = "Genus")
+get_taxa_unique(ps.rar.bocas_agg_gen,
+                taxonomic.rank = rank_names(ps.rar.bocas_agg_gen)[2],
+                errorIfNULL = TRUE)
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+phy_order <- rev(c("Verrucomicrobia",
+               "Thaumarchaeota",
+               "Tenericutes",
+               "Spirochaetes",
+               "Proteobacteria",
+               "Planctomycetes",
+               "Marinimicrobia_(SAR406_clade)",
+               "Firmicutes",
+               "Euryarchaeota",
+               "Cyanobacteria",
+               "Chloroflexi",
+               "Bacteroidetes",
+               "Actinobacteria",
+               "Acidobacteria",
+               "k_Bacteria",
+               "Other"))
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+gen_order <- c("Other", "k_Bacteria", "p_Proteobacteria",
+               "p_Marinimicrobia_(SAR406_clade)", "o_Thalassobaculales",
+               "o_SAR86_clade", "o_SAR324_clade(Marine_group_B)",
+               "o_Rickettsiales", "o_Marine_Group_II", "o_KI89A_clade",
+               "o_Betaproteobacteriales", "f_Xanthobacteraceae",
+               "f_SAR116_clade", "f_S25-593", "f_Ruminococcaceae",
+               "f_Rhodobacteraceae", "f_Pirellulaceae", "f_NS9_marine_group",
+               "f_Lachnospiraceae", "f_EC94", "f_Cyanobiaceae", "f_Cryomorphaceae",
+               "f_Clade_II", "f_Caldilineaceae", "f_AEGEAN-169_marine_group",
+               "f_A4b", "c_Gammaproteobacteria", "c_Alphaproteobacteria",
+               "Woeseia", "Vibrio", "Tyzzerella", "Tistlia", "Synechococcus_CC9902",
+               "Sva0996_marine_group", "Shewanella", "Ruegeria", "Romboutsia",
+               "Prosthecochloris", "OM60(NOR5)_clade", "NS5_marine_group",
+               "NS4_marine_group", "NS2b_marine_group", "Lachnospiraceae_UCG-010",
+               "JTB255_marine_benthic_group", "HIMB11", "Flavonifractor",
+               "Ferrimonas", "Epulopiscium", "Endozoicomonas", "Cyanobium_PCC-6307",
+               "Clostridium_sensu_stricto_2", "Clostridium_sensu_stricto_1",
+               "Clade_Ib", "Clade_Ia", "Catenococcus", "Candidatus_Actinomarina",
+               "Brevinema", "Anaerofilum")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+Fractions_phylum <- ps.rar.bocas_agg_phy %>%
+        transform_sample_counts(function(x) {x/sum(x)} ) %>%
+        psmelt()
+Fractions_phylum$Phylum <- gdata::reorder.factor(Fractions_phylum$Phylum,
+                                                 new.order = phy_order)
+Fractions_phylum <- Fractions_phylum %>% dplyr::arrange(Phylum)
+levels(Fractions_phylum$Phylum)
+attributes(Fractions_phylum$Phylum)
+
+Fractions_genus <- ps.rar.bocas_agg_gen %>%
+        transform_sample_counts(function(x) {x/sum(x)} ) %>%
+        psmelt()
+Fractions_genus$Genus <- gdata::reorder.factor(Fractions_genus$Genus, new.order = gen_order)
+Fractions_genus <- Fractions_genus %>% dplyr::arrange(Genus)
+levels(Fractions_genus$Genus)
+attributes(Fractions_genus$Genus)
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+level_order <- c('Fish', 'Algae', 'Coral', 'Softcoral',
+                 'Sponge','Sponge_infauna','Zoanthus', 'Water')
+font_theme = theme(
+        axis.title.x = element_text(size = 14),
+        axis.text.x = element_text(size = 8),
+        axis.title.y = element_text(size = 14),
+        axis.text.y = element_text(size = 8))
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+colvec.phylum <- c("#323232",
+                   "#7C7C7C",
+                   "seagreen2",
+                   "grey",
+                   "tomato4",
+                   #"lightsalmon3",
+                   "gold4",
+                   "skyblue",
+                   "papayawhip",
+                   "darksalmon",
+                   "steelblue",
+                   "burlywood3",
+                   "darkseagreen",
+                   "thistle3",
+                   "powderblue",
+                   "chocolate4",
+                   "pink")
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+colvec.genus <- c("#323232",
+         "seagreen2", "lightgrey", "tomato3", "coral1", "darkolivegreen4",
+         "mistyrose", "burlywood", "lightsalmon", "snow2", "powderblue",
+         "darksalmon", "pink3", "skyblue", "lightsalmon4", "thistle3",
+         "lightsalmon3", "peachpuff3", "chocolate4", "darkmagenta", "maroon",
+         "papayawhip", "seagreen1", "deepskyblue4", "darkseagreen",
+         "mediumaquamarine", "deeppink3", "aquamarine3", "skyblue4",
+         "darkorange3", "hotpink", "yellow1", "salmon", "darkseagreen2",
+         "lightblue4", "plum1", "burlywood", "steelblue", "tomato", "seagreen2",
+         "tomato2", "lightgoldenrod3", "gold4", "thistle4", "darkolivegreen4",
+         "indianred4", "blue", "lavender", "lightskyblue", "mediumpurple3",
+         "lightgoldenrod", "goldenrod", "lightseagreen", "lightcoral",
+         "thistle3", "powderblue", "chocolate4", "pink"
+)
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+fig01_alt <- ggplot(Fractions_phylum,
+                aes(x = factor(Fraction_delailed, level = level_order),
+                    y = Abundance, fill = Phylum)) +
+  geom_bar(stat = "identity", position = "fill") +
+  scale_fill_manual(values = colvec.phylum) +
+  scale_x_discrete("Fraction", expand = waiver(), position = "bottom", drop = FALSE) +
+  theme_cowplot() +
+  font_theme +
+  guides(fill = guide_legend(reverse = TRUE, keywidth = 1, keyheight = 1)) +
+  ylab("Relative Abundance") +
+  ggtitle("All sample fractions\nPhylum") +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_rect(fill = "transparent", colour = NA),
+        plot.background = element_rect(fill = "transparent", colour = NA),
+        panel.border = element_rect(fill = NA, color = "black"))
+fig01_alt
+dev.off()
+fig01_alt
+png("figures/p2/phyla_all.png", height = 14, width = 28, units = 'cm', res = 600, bg = "white")
+fig01_alt
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+fig00_alt <-
+        ggplot(Fractions_genus, aes(x = factor(Fraction_delailed,
+                                               level = level_order),
+                                    y = Abundance, fill = Genus)) +
+        geom_bar(stat = "identity", position = "fill") +
+        scale_fill_manual(values = colvec.genus) +
+        scale_x_discrete("Sample", expand = waiver(), position = "bottom",
+                         drop = FALSE) +
+        theme_cowplot() +
+        font_theme +
+        guides(fill = guide_legend(reverse = TRUE,
+                                   keywidth = 1, keyheight = 1)) +
+        ylab("Relative Abundance (Genus > 5%)") +
+        ggtitle("All sample fractions\nGenus") +
+        theme(panel.grid.major = element_blank(),
+              panel.grid.minor = element_blank(),
+              panel.background = element_rect(fill = "transparent", colour = NA),
+              plot.background = element_rect(fill = "transparent", colour = NA),
+              panel.border = element_rect(fill = NA, color = "black"))
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+png("figures/p2/All_Fractions_double_all.png", height = 14, width = 28,
+    units = 'cm', res = 600, bg = "white")
+fig_alt <- ggarrange(fig01_alt, fig00_alt, ncol = 1,labels = c("A", "B"))
+fig_alt
+dev.off()
+
+tiff("figures/p2/All_Fractions_double_all.tiff", height = 14, width = 28,
+     units = 'cm',compression = "lzw", res = 600, bg = 'white')
+fig_alt
+dev.off()
+
+fig_alt
+pdf("figures/p2/All_Fractions_double_all.pdf", height = 12, width = 16)
+fig_alt
+dev.off()
+
+
+##---- echo=FALSE, fig.height=4, layout='l-body-outset', eval=FALSE-------------
+fig00_mod_alt <- fig00_alt
+fig01_mod_alt <- fig01_alt
+fig01_mod_alt <- fig01_mod_alt + ggtitle("All Samples Fraction", subtitle = "Phylum") +
+  theme(axis.title.x = element_text(size = 14),
+        axis.text.x = element_text(size = 8),
+        axis.title.y = element_text(size = 10),
+        axis.text.y = element_text(size = 8),
+        legend.text = element_text(size = 10),
+        plot.title = element_text(size = 12)) +
+  guides(fill = guide_legend(reverse = FALSE,
+                             keywidth = 0.6, keyheight = 0.6))
+fig00_mod_alt <- fig00_mod_alt + ggtitle("All Samples Fraction", subtitle = "Genus") +
+  theme(axis.title.x = element_text(size = 14),
+        axis.text.x = element_text(size = 8),
+        axis.title.y = element_text(size = 10),
+        axis.text.y = element_text(size = 8),
+        legend.text = element_text(size = 10),
+        plot.title = element_text(size = 12)) +
+  guides(fill = guide_legend(reverse = FALSE,
+                             keywidth = 0.6, keyheight = 0.6))
+
+
+##---- echo=FALSE, fig.height=4, layout='l-body-outset', eval=FALSE-------------
+ggarrange(fig01_mod_alt, fig00_mod_alt, ncol = 1, labels = c("A", "B"))
+
+
+##---- echo=FALSE, warning=FALSE, fig.height=5, layout='l-page'-----------------
+knitr::include_graphics("figures/p2/All_Fractions_double_all-1.png")
+
+
+##---- include=FALSE, eval=FALSE------------------------------------------------
+save.image("rdata/p2/bocasbiome_p2_all.rdata")
+remove(list = ls())
+
+#############################
+##
+## No 3. Subset Fish Only Samples
+##
+#############################
+
+##----setup, include=FALSE------------------------------------------------------
+library(tidyverse)
+library(phyloseq)
+library(microbiome)
+library(ggpubr)
+library(labdsv)
+require(gdata)
+library(scales)
+library(patchwork)
+library(DT)
+library(cowplot)
+library(plyr)
+library(data.table)
+library(pairwiseAdonis)
+library(ggpubr)
+library(GUniFrac)
+library(ade4)
+library(ape)
+library(vegan)
+library(hilldiv)
+library(GUniFrac) #generalized unifrac
+options(scipen=999)
+knitr::opts_chunk$set(echo = TRUE)
+
+
+##---- include=FALSE------------------------------------------------------------
+remove(list = ls())
+#This can only be used AFTER the workflow is finished.
+#Load the output to run all of the inline code, etc
+#!!! MUST CLEAR MEMORY!!!
+##ls.str(ex)
+load("rdata/p3/bocasbiome_p3.rdata")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+ps.slv.tree.mbio.rar.bocas <- readRDS(
+  "rdata/p2/ps_16S_bocas_rar_all_ASVID_no_NA.rds")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+ps.slv.tree.mbio.rar.bocas.fish_all <- subset_samples(ps.slv.tree.mbio.rar.bocas,
+                                                  Fraction == "Fish")
+sample_data(ps.slv.tree.mbio.rar.bocas.fish_all)
+
+
+##---- echo=FALSE---------------------------------------------------------------
+ps.slv.tree.mbio.rar.bocas.fish_all
+
+
+##---- echo=FALSE---------------------------------------------------------------
+rapply(data.frame(sample_data(ps.slv.tree.mbio.rar.bocas.fish_all)),function(x)length(unique(x)))
+
+
+##------------------------------------------------------------------------------
+any(taxa_sums(ps.slv.tree.mbio.rar.bocas.fish_all) == 0)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+ps.slv.tree.mbio.rar.bocas.fish <- prune_taxa(
+  taxa_sums(ps.slv.tree.mbio.rar.bocas.fish_all) > 0,
+  ps.slv.tree.mbio.rar.bocas.fish_all)
+saveRDS(ps.slv.tree.mbio.rar.bocas.fish,"rdata/p3/ps_16S_bocas_fish_final.rds")
+
+
+##---- echo=FALSE---------------------------------------------------------------
+ps.slv.tree.mbio.rar.bocas.fish
+
+
+##---- include=FALSE, eval=FALSE------------------------------------------------
+save.image("rdata/p3/bocasbiome_p3.rdata")
+remove(list = ls())
+
+#############################
+##
+## No 4. Alpha Diversity Estimates
+##
+#############################
+
+##----setup, include=FALSE------------------------------------------------------
+library(tidyverse)
+library(phyloseq)
+library(microbiome)
+library(ggpubr)
+library(labdsv)
+require(gdata)
+library(scales)
+library(patchwork)
+library(DT)
+library(cowplot)
+library(plyr)
+library(data.table)
+library(pairwiseAdonis)
+library(ggpubr)
+library(GUniFrac)
+library(ade4)
+library(ape)
+library(vegan)
+library(hilldiv)
+library(GUniFrac) #generalized unifrac
+library(dunn.test)
+library(knitr)
+library(kableExtra)
+
+#options(scipen=999)
+knitr::opts_chunk$set(echo = TRUE)
+
+
+##---- include=FALSE------------------------------------------------------------
+remove(list = ls())
+load("rdata/p4/bocasbiome_p4_whole.rdata")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+ps.whole <- readRDS("rdata/p3/ps_16S_bocas_fish_final.rds")
+ps.whole
+
+
+##---- echo=FALSE---------------------------------------------------------------
+ps.whole
+
+
+##---- eval=FALSE---------------------------------------------------------------
+asv.whole <- t(otu_table(ps.whole))
+tree.whole <- phy_tree(ps.whole)
+identical(sort(rownames(asv.whole)), sort(tree.whole$tip.label))
+
+
+##---- echo=FALSE---------------------------------------------------------------
+identical(sort(rownames(asv.whole)), sort(tree.whole$tip.label))
+
+
+##---- eval=FALSE---------------------------------------------------------------
+asv.whole.norm <- microbiome::transform(asv.whole, transform = "compositional")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+hillq0 <- estimate_richness(ps.whole, measures = "Observed")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+shannon.hill <- exp(vegan::diversity(t(asv.whole.norm), index = "shannon"))
+shannon.whole.df <- as.data.frame(shannon.hill)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+1/(1-(vegan::diversity(t(asv.whole.norm), index = "simpson")))
+simpson.hill<-1/(1-(vegan::diversity(t(asv.whole.norm), index = "simpson")))
+simpson.whole.df <- as.data.frame(simpson.hill)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+newDF.whole <- data.frame(hillq0, shannon.hill, simpson.hill,
+                          sample_data(ps.whole))
+ps.whole.hill <- merge_phyloseq(otu_table(ps.whole),
+                                sample_data(newDF.whole),
+                                tax_table(ps.whole),
+                                phy_tree(ps.whole))
+ps.whole.hill
+sample_data(ps.whole.hill)
+saveRDS(ps.whole.hill, "rdata/p4/ps_16S_bocas_fish_final_hill.rds")
+
+
+##---- echo=FALSE---------------------------------------------------------------
+ps.whole.hill
+
+
+##---- eval=FALSE---------------------------------------------------------------
+ps.outer <- subset_samples(ps.whole.hill, Zone == "Outer bay")
+ps.outer <- prune_taxa(taxa_sums(ps.outer) > 0, ps.outer)
+ps.outer
+ps.inner <- subset_samples(ps.whole.hill, Zone == "Inner bay")
+ps.inner <- prune_taxa(taxa_sums(ps.inner) > 0, ps.inner)
+ps.inner
+ps.inner.dist <- subset_samples(ps.whole.hill, Zone == "Inner bay disturbed")
+ps.inner.dist <- prune_taxa(taxa_sums(ps.inner.dist) > 0, ps.inner.dist)
+ps.inner.dist
+
+
+##---- echo=FALSE---------------------------------------------------------------
+ps.outer
+ps.inner
+ps.inner.dist
+
+
+##---- eval=FALSE---------------------------------------------------------------
+asv.outer <- t(otu_table(ps.outer))
+asv.inner <- t(otu_table(ps.inner))
+asv.inner.dist <- t(otu_table(ps.inner.dist))
+
+
+##---- eval=FALSE---------------------------------------------------------------
+asv.outer.norm <- microbiome::transform(asv.outer, transform = "compositional")
+asv.inner.norm <- microbiome::transform(asv.inner, transform = "compositional")
+asv.inner.dist.norm <- microbiome::transform(asv.inner.dist,
+                                             transform = "compositional")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+alpha_div(countable = asv.outer.norm, qvalue = 0)
+alpha_div(countable = asv.outer.norm, qvalue = 1)
+alpha_div(countable = asv.outer.norm, qvalue = 2)
+
+alpha_div(countable = asv.inner.norm, qvalue = 0)
+alpha_div(countable = asv.inner.norm, qvalue = 1)
+alpha_div(countable = asv.inner.norm, qvalue = 2)
+
+alpha_div(countable = asv.inner.dist.norm, qvalue = 0)
+alpha_div(countable = asv.inner.dist.norm, qvalue = 1)
+alpha_div(countable = asv.inner.dist.norm, qvalue = 2)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+temp_table <- data.frame(sample_data(ps.whole))
+temp_table[, c(1:4, 7:11)] <- list(NULL)
+temp_table <- temp_table %>% tibble::rownames_to_column("Sample")
+temp_table <- temp_table %>% dplyr::rename(Group = Zone)
+temp_table$Group <- as.character(temp_table$Group)
+temp_table$Reef <- as.character(temp_table$Reef)
+
+hill_hierarchy <- temp_table[,1:2]
+hill_hierarchy2 <- temp_table[, c(1, 3)]
+
+
+##---- eval=FALSE---------------------------------------------------------------
+divtestresult.q0 <- div_test(asv.whole.norm, qvalue = 0,
+                             hierarchy = hill_hierarchy, posthoc = TRUE)
+divtestresult.q1 <- div_test(asv.whole.norm, qvalue = 1,
+                             hierarchy = hill_hierarchy, posthoc = TRUE)
+divtestresult.q2 <- div_test(asv.whole.norm, qvalue = 2,
+                             hierarchy = hill_hierarchy, posthoc = TRUE)
+
+
+##---- echo=FALSE, eval=FALSE---------------------------------------------------
+divtestresult.q0_z <- divtestresult.q0
+divtestresult.q1_z <- divtestresult.q1
+divtestresult.q2_z <- divtestresult.q2
+
+
+##---- echo=FALSE---------------------------------------------------------------
+divtestresult.q0_z$posthoc
+
+
+##---- echo=FALSE---------------------------------------------------------------
+divtestresult.q1_z$posthoc
+
+
+##---- echo=FALSE---------------------------------------------------------------
+divtestresult.q2_z$posthoc
+
+
+##---- eval=FALSE---------------------------------------------------------------
+divtestresult.q0 <- div_test(asv.whole.norm, qvalue = 0,
+                             hierarchy = hill_hierarchy2, posthoc = TRUE)
+divtestresult.q1 <- div_test(asv.whole.norm, qvalue = 1,
+                             hierarchy = hill_hierarchy2, posthoc = TRUE)
+divtestresult.q2 <- div_test(asv.whole.norm, qvalue = 2,
+                             hierarchy = hill_hierarchy2, posthoc = TRUE)
+
+
+##---- echo=FALSE, eval=FALSE---------------------------------------------------
+divtestresult.q0_r <- divtestresult.q0
+divtestresult.q1_r <- divtestresult.q1
+divtestresult.q2_r <- divtestresult.q2
+
+
+##---- echo=FALSE---------------------------------------------------------------
+rmarkdown::paged_table(divtestresult.q0_r$posthoc, options = list(rows.print = 5))
+
+
+##---- echo=FALSE---------------------------------------------------------------
+rmarkdown::paged_table(divtestresult.q1_r$posthoc, options = list(rows.print = 5))
+
+
+##---- echo=FALSE---------------------------------------------------------------
+rmarkdown::paged_table(divtestresult.q2_r$posthoc, options = list(rows.print = 5))
+
+
+##---- eval=FALSE---------------------------------------------------------------
+data.hill.whole_n <- data.frame(sample_data(ps.whole.hill)) %>%
+  pivot_longer(cols = 1:3, names_to = "Index",  values_to = "Diversity")
+data.hill.whole_n$Fraction_delailed <- NULL
+data.hill.whole_n <- data.hill.whole_n[, c(10,1,2,3,4,5,6,7,8,9,12,11)]
+data.hill.whole_n <- dplyr::mutate_if(data.hill.whole_n, is.factor, as.character)
+data.hill.whole_n$Index <- stringr::str_replace(
+  data.hill.whole_n$Index, "Observed", "Observed (q=0)")
+data.hill.whole_n$Index <- stringr::str_replace(
+  data.hill.whole_n$Index, "shannon.hill", "Shannon exponential (q=1)")
+data.hill.whole_n$Index <- stringr::str_replace(
+  data.hill.whole_n$Index, "simpson.hill", "Simpson multiplicative inverse (q=2)")
+data.hill.whole_n <- data.hill.whole_n[order(data.hill.whole_n$Index),]
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+save.image("rdata/p4/bocasbiome_p4_whole.rdata")
+saveRDS(data.hill.whole_n, "rdata/p4/data.hill.whole_n.rds")
+
+
+##---- include=FALSE------------------------------------------------------------
+remove(list = ls())
+load("rdata/p4/bocasbiome_p4_core.rdata")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+ps.core <- readRDS("rdata/p1/ps_indv01_core_fish.rds")
+ps.core
+
+
+##---- echo=FALSE---------------------------------------------------------------
+ps.core
+
+
+##---- eval=FALSE---------------------------------------------------------------
+asv.core <- t(otu_table(ps.core))
+tree.core <- phy_tree(ps.core)
+identical(sort(rownames(asv.core)), sort(tree.core$tip.label))
+
+
+##---- echo=FALSE---------------------------------------------------------------
+identical(sort(rownames(asv.core)), sort(tree.core$tip.label))
+
+
+##---- eval=FALSE---------------------------------------------------------------
+asv.core.norm <- microbiome::transform(asv.core, transform = "compositional")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+hillq0 <- estimate_richness(ps.core, measures = "Observed")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+shannon.hill <- exp(vegan::diversity(t(asv.core.norm), index = "shannon"))
+shannon.core.df <- as.data.frame(shannon.hill)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+1/(1-(vegan::diversity(t(asv.core.norm), index = "simpson")))
+simpson.hill <- 1/(1-(vegan::diversity(t(asv.core.norm), index = "simpson")))
+simpson.core.df <- as.data.frame(simpson.hill)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+newDF.core <- data.frame(hillq0, shannon.hill,
+                         simpson.hill, sample_data(ps.core))
+ps.core.hill <- merge_phyloseq(otu_table(ps.core),
+                               sample_data(newDF.core),
+                               tax_table(ps.core),
+                               phy_tree(ps.core))
+saveRDS(ps.core.hill, "rdata/p4/ps_core_hill.rds")
+
+
+##---- echo=FALSE---------------------------------------------------------------
+ps.core.hill
+
+
+##---- eval=FALSE---------------------------------------------------------------
+ps.outer <- subset_samples(ps.core.hill, Zone == "Outer bay")
+ps.outer <- prune_taxa(taxa_sums(ps.outer) > 0, ps.outer)
+ps.outer
+ps.inner <- subset_samples(ps.core.hill, Zone == "Inner bay")
+ps.inner <- prune_taxa(taxa_sums(ps.inner) > 0, ps.inner)
+ps.inner
+ps.inner.dist <- subset_samples(ps.core.hill, Zone == "Inner bay disturbed")
+ps.inner.dist <- prune_taxa(taxa_sums(ps.inner.dist) > 0, ps.inner.dist)
+ps.inner.dist
+
+
+##---- echo=FALSE---------------------------------------------------------------
+ps.outer
+ps.inner
+ps.inner.dist
+
+
+##---- eval=FALSE---------------------------------------------------------------
+asv.outer <- t(otu_table(ps.outer))
+asv.inner <- t(otu_table(ps.inner))
+asv.inner.dist <- t(otu_table(ps.inner.dist))
+
+
+##---- eval=FALSE---------------------------------------------------------------
+asv.outer.norm <- microbiome::transform(asv.outer, transform = "compositional")
+asv.inner.norm <- microbiome::transform(asv.inner, transform = "compositional")
+asv.inner.dist.norm <- microbiome::transform(asv.inner.dist, transform = "compositional")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+alpha_div(countable = asv.outer.norm, qvalue = 0)
+alpha_div(countable = asv.outer.norm, qvalue = 1)
+alpha_div(countable = asv.outer.norm, qvalue = 2)
+
+alpha_div(countable = asv.inner.norm, qvalue = 0)
+alpha_div(countable = asv.inner.norm, qvalue = 1)
+alpha_div(countable = asv.inner.norm, qvalue = 2)
+
+alpha_div(countable = asv.inner.dist.norm, qvalue = 0)
+alpha_div(countable = asv.inner.dist.norm, qvalue = 1)
+alpha_div(countable = asv.inner.dist.norm, qvalue = 2)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+temp_table <- data.frame(sample_data(ps.core))
+temp_table[, c(1:4, 7:11)] <- list(NULL)
+temp_table <- temp_table %>% tibble::rownames_to_column("Sample")
+temp_table <- temp_table %>% dplyr::rename(Group = Zone)
+temp_table$Group <- as.character(temp_table$Group)
+temp_table$Reef <- as.character(temp_table$Reef)
+
+hill_hierarchy <- temp_table[,1:2]
+hill_hierarchy2 <- temp_table[, c(1, 3)]
+
+
+##---- eval=FALSE---------------------------------------------------------------
+divtestresult.q1 <- div_test(asv.core.norm, qvalue = 1,
+                             hierarchy = hill_hierarchy, posthoc = TRUE)
+divtestresult.q2 <- div_test(asv.core.norm, qvalue = 2,
+                             hierarchy = hill_hierarchy, posthoc = TRUE)
+
+
+##---- echo=FALSE, eval=FALSE---------------------------------------------------
+divtestresult.q1_z <- divtestresult.q1
+divtestresult.q2_z <- divtestresult.q2
+
+
+##---- echo=FALSE---------------------------------------------------------------
+divtestresult.q1_z$posthoc
+
+
+##---- echo=FALSE---------------------------------------------------------------
+divtestresult.q2_z$posthoc
+
+
+##---- eval=FALSE---------------------------------------------------------------
+divtestresult.q1 <- div_test(asv.core.norm, qvalue = 1,
+                             hierarchy = hill_hierarchy2, posthoc = TRUE)
+divtestresult.q2 <- div_test(asv.core.norm, qvalue = 2,
+                             hierarchy = hill_hierarchy2, posthoc = TRUE)
+
+
+##---- echo=FALSE, eval=FALSE---------------------------------------------------
+divtestresult.q1_r <- divtestresult.q1
+divtestresult.q2_r <- divtestresult.q2
+
+
+##---- echo=FALSE---------------------------------------------------------------
+rmarkdown::paged_table(divtestresult.q1_r$posthoc, options = list(rows.print = 5))
+
+
+##---- echo=FALSE---------------------------------------------------------------
+rmarkdown::paged_table(divtestresult.q2_r$posthoc, options = list(rows.print = 5))
+
+
+##---- eval=FALSE---------------------------------------------------------------
+hill.core.DF <- data.frame(sample_data(ps.core.hill))
+kruskal.test(Observed~Zone, data = hill.core.DF)
+kruskal.test(Observed~Reef, data = hill.core.DF)
+dunn.core.obs.zone <- dunn.test(hill.core.DF$Observed, hill.core.DF$Zone,
+                              method="hochberg", table=TRUE, wrap=TRUE)
+dunn.core.obs.reef <- dunn.test(hill.core.DF$Observed, hill.core.DF$Reef,
+                              method="hochberg", table = TRUE, wrap = TRUE)
+dunn.test(hill.core.DF$Observed, hill.core.DF$Zone, method="none")
+dunn.test(hill.core.DF$Observed, hill.core.DF$Reef, method="none")
+
+
+##---- echo=FALSE, eval=FALSE---------------------------------------------------
+divtestresult.q1_r <- divtestresult.q1
+divtestresult.q2_r <- divtestresult.q2
+
+
+##---- echo=FALSE---------------------------------------------------------------
+rmarkdown::paged_table(divtestresult.q1_r$posthoc, options = list(rows.print = 5))
+
+
+##---- echo=FALSE---------------------------------------------------------------
+rmarkdown::paged_table(divtestresult.q2_r$posthoc, options = list(rows.print = 5))
+
+
+##---- eval=FALSE---------------------------------------------------------------
+data.hill.core_n <- hill.core.DF %>%
+  pivot_longer(cols = 1:3, names_to = "Index",  values_to = "Diversity")
+data.hill.core_n$Fraction_delailed <- NULL
+data.hill.core_n <- data.hill.core_n[, c(10,1,2,3,4,5,6,7,8,9,12,11)]
+data.hill.core_n <- dplyr::mutate_if(data.hill.core_n, is.factor, as.character)
+data.hill.core_n$Index <- stringr::str_replace(
+  data.hill.core_n$Index, "Observed", "Observed (q=0)")
+data.hill.core_n$Index <- stringr::str_replace(
+  data.hill.core_n$Index, "shannon.hill", "Shannon exponential (q=1)")
+data.hill.core_n$Index <- stringr::str_replace(
+  data.hill.core_n$Index, "simpson.hill", "Simpson multiplicative inverse (q=2)")
+data.hill.core_n <- data.hill.core_n[order(data.hill.core_n$Index),]
+
+
+##---- include=FALSE------------------------------------------------------------
+save.image("rdata/p4/bocasbiome_p4_core.rdata")
+saveRDS(data.hill.core_n, "rdata/p4/data.hill.core_n.rds")
+remove(list = ls())
+
+
+##---- eval=FALSE---------------------------------------------------------------
+data.hill.whole <- readRDS("rdata/p4/data.hill.whole_n.rds")
+data.hill.core <- readRDS("rdata/p4/data.hill.core_n.rds")
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+data.hill.whole1 <- data.hill.whole %>%
+  dplyr::rename("Diversity_whole" = "Diversity")
+data.hill.core1 <- data.hill.core %>%
+  dplyr::rename("Diversity_core" = "Diversity")
+data.hill_table <- dplyr::left_join(data.hill.whole1, data.hill.core1)
+data.hill_table <- data.hill_table[, c(1:11,13,12)]
+
+
+##----layout='l-body-outset', echo=FALSE----------------------------------------
+elementId need to be unique https://www.random.org/strings/
+load("rdata/p4/bocasbiome_p4_summary.rdata")
+datatable(data.hill_table, width = "100%", escape = FALSE,
+          rownames = FALSE, filter = 'top',
+          caption = htmltools::tags$caption(
+            style = 'caption-side: bottom; text-align: left;',
+            'Table: ', htmltools::em('Diversity estimates for whole vs. core. Use the buttons to
+            navigate through the table or download a copy.')),
+          elementId = "sp61m892w0poktim96dq",
+          extensions = 'Buttons', options = list(
+            scrollX = TRUE,
+            dom = 'Blfrtip',
+            buttons = c('copy', 'csv', 'excel'),
+            pageLength = 5,
+            lengthMenu = list(c(5, 10, 50, -1), c("5", "10", "50", "All"))
+            )
+          ) %>%
+  DT::formatStyle(columns = colnames(data.hill_table), fontSize = '80%') %>%
+  DT::formatRound(columns = c("Diversity_whole", "Diversity_core"), digits = 3)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+#, foldcode=TRUE
+level_order3 <- c('SCR', 'PPR', 'CCR', 'ALR', 'SIS', 'ROL', 'RNW', 'PST','PBL')
+level_order <- c('Outer bay', 'Inner bay', 'Inner bay disturbed')
+level_order2 <- c('Observed', 'shannon.hill', 'simpson.hill')
+disp.pal4 <- c("royalblue4", "royalblue3", "royalblue1", "aquamarine4",
+               "mediumaquamarine", "aquamarine2", "chocolate3", "chocolate2",
+               "sienna1","royalblue4", "royalblue3", "royalblue1",
+               "aquamarine4", "mediumaquamarine", "aquamarine2", "chocolate3",
+               "chocolate2", "sienna1")
+disp.pal5 <-  c("midnightblue", "royalblue4", "royalblue3","darkslategrey",
+                "aquamarine4", "mediumaquamarine", "chocolate4", "sienna",
+                "chocolate3","midnightblue", "royalblue4", "royalblue3",
+                "darkslategrey","aquamarine4", "mediumaquamarine", "chocolate4",
+                "sienna", "chocolate3")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+data.hill.whole$Reef <- factor(data.hill.whole$Reef,
+                               levels = c('SCR', 'PPR', 'CCR', 'ALR', 'SIS',
+                                          'ROL', 'RNW', 'PST','PBL'))
+data.hill.core$Reef <- factor(data.hill.core$Reef,
+                              levels = c('SCR', 'PPR', 'CCR', 'ALR', 'SIS',
+                                         'ROL', 'RNW', 'PST','PBL'))
+
+
+##---- eval=FALSE---------------------------------------------------------------
+font_theme = theme(
+        axis.title.x = element_text(size = 14),
+        axis.text.x = element_text(size = 10),
+        axis.title.y = element_text(size = 14),
+        axis.text.y = element_text(size = 8))
+
+
+##---- eval=FALSE---------------------------------------------------------------
+fig01 <-
+        ggplot(data = data.hill.whole, aes(x = factor(Zone, level = level_order),
+                                           y=Diversity)) +
+        stat_boxplot(aes(colour=Reef), geom ='errorbar') + #alpha=0.3
+        geom_boxplot(aes(fill=Reef, colour=Reef), alpha=0.6,
+                     outlier.alpha = 0.7, outlier.shape = 16) +
+        scale_colour_manual(values=disp.pal5)+
+        scale_fill_manual(values=disp.pal4)+
+        ggtitle("Alpha Diversity", subtitle="Whole microbiome")+
+        theme(plot.title=element_text(size=18)) +
+        theme(plot.subtitle=element_text(size=16)) +
+        font_theme+
+        stat_summary(aes(fill=Reef), fun="mean", geom="point", size=2.5, shape=18,
+                     position=position_dodge(width=0.75),
+                     color=c(  "midnightblue","royalblue4", "royalblue3",
+                               "darkslategrey","aquamarine4","mediumaquamarine",
+                               "chocolate4", "sienna", "chocolate3",
+                               "midnightblue","royalblue4", "royalblue3",
+                               "darkslategrey","aquamarine4","mediumaquamarine",
+                               "chocolate4", "sienna", "chocolate3",
+                               "midnightblue","royalblue4", "royalblue3",
+                               "darkslategrey","aquamarine4","mediumaquamarine",
+                               "chocolate4", "sienna", "chocolate3"),
+                     show.legend = FALSE) +
+        scale_x_discrete(name="Zone") + scale_y_continuous(name="Hill diversity") +
+        theme(plot.title = element_text(family=NA, face="bold", size=16)) +
+        facet_wrap(~factor(Index, levels=unique(Index)),scales="free",
+                   nrow=2, ncol = 3) +
+        theme(strip.background = element_rect(color="black", fill="white",
+                                              size=1, linetype="blank"),
+              strip.text.x = element_text(size = 14),
+              panel.border = element_rect(fill = NA, color="black"),
+              panel.grid.major = element_blank(),
+              panel.grid.minor = element_blank(),
+              panel.background = element_rect(fill = "white",colour = NA),
+              legend.key = element_rect(fill = "transparent", color = NA),
+              legend.text = element_text(size = 12),
+              legend.title = element_text(size = 14))
+
+
+##---- eval=FALSE---------------------------------------------------------------
+fig02 <-
+        ggplot(data = data.hill.core, aes(x = factor(Zone, level = level_order),
+                                          y=Diversity)) +
+        stat_boxplot(aes(colour=Reef), geom ='errorbar') +
+        geom_boxplot(aes(fill=Reef, colour=Reef), alpha=0.6,
+                     outlier.alpha = 0.7, outlier.shape = 16) +
+        scale_colour_manual(values=disp.pal5) +
+        scale_fill_manual(values=disp.pal4) +
+        ggtitle("", subtitle="Core microbiome")+
+        theme(plot.subtitle = element_text(size=16))+
+        font_theme+
+        stat_summary(aes(fill=Reef), fun="mean", geom="point", size=2.5, shape=18,
+                     position=position_dodge(width=0.75),
+                     color=c(  "midnightblue","royalblue4", "royalblue3",
+                               "darkslategrey","aquamarine4","mediumaquamarine",
+                               "chocolate4", "sienna", "chocolate3",
+                               "midnightblue","royalblue4", "royalblue3",
+                               "darkslategrey","aquamarine4","mediumaquamarine",
+                               "chocolate4", "sienna", "chocolate3",
+                               "midnightblue","royalblue4", "royalblue3",
+                               "darkslategrey","aquamarine4","mediumaquamarine",
+                               "chocolate4", "sienna", "chocolate3"),
+                     show.legend = FALSE)+
+        scale_x_discrete(name="Zone") + scale_y_continuous(name="Hill diversity")+
+        theme(plot.title = element_text(family=NA, face="bold", size=16)) +
+        facet_wrap(~factor(Index, levels=unique(Index)), scales="free",
+                   nrow=2, ncol = 3) +
+        theme(strip.background = element_rect(color="black", fill="white",
+                                              size=1, linetype="blank"),
+              strip.text.x = element_text(size = 14),
+              panel.border = element_rect(fill = NA, color="black"),
+              panel.grid.major = element_blank(),
+              panel.grid.minor = element_blank(),
+              panel.background = element_rect(fill = "white",colour = NA),
+              legend.key = element_rect(fill = "transparent", color = NA),
+              legend.text = element_text(size = 12),
+              legend.title = element_text(size = 14))
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+tiff("figures/p4/Boxplot_alpha_div_facetNEWcore.tiff", height=32, width=40,
+     units='cm',compression="lzw", res=600, bg='white')
+fig <- ggarrange(fig01,fig02, ncol=1, common.legend = TRUE, legend="right")
+fig
+dev.off()
+png("figures/p4/Boxplot_alpha_div_facetNEWcore.png", height=32, width=40,
+    units = 'cm', res = 600, bg = "white")
+fig
+dev.off()
+pdf("figures/p4/Boxplot_alpha_div_facetNEWcore2.pdf", height = 10, width = 12)
+fig
+dev.off()
+
+
+##---- echo=FALSE, fig.height=8, layout='l-body-outset', eval=FALSE-------------
+ggarrange(fig01, fig02, ncol = 1, labels = c("A", "B"))
+
+
+##---- echo=FALSE, fig.height=8, layout='l-body-outset', eval=FALSE-------------
+p_filt_plots <-  fig01 / fig02
+p_filt_plots <-  p_filt_plots +
+#  plot_annotation(tag_levels = 'A',
+#                  title = 'Core Microbiomes',
+#                  #subtitle = 'Top 40 taxa of filtered data',
+#                  caption = 'A) Fish gut core microbiome,
+#                  B) Core across zones') +
+  plot_layout(widths = c(1, 2), guides = "collect") &
+  theme(plot.title = element_text(size = 16),
+        axis.text.x = element_text(face = "italic"),
+        plot.tag = element_text(size = 8),
+        legend.position = "right", legend.text = element_text(size = 10))
+p_filt_plots
+
+
+##---- echo=FALSE, warning=FALSE, fig.height=5, layout='l-page'-----------------
+knitr::include_graphics("figures/p4/Boxplot_alpha_div_facetNEWcore.png")
+
+
+##---- include=FALSE, eval=FALSE------------------------------------------------
+save.image("rdata/p4/bocasbiome_p4_summary.rdata")
+remove(list = ls())
+
+#############################
+##
+## No 5. Beta Diversity Estimates
+##
+#############################
+
+##----setup, include=FALSE------------------------------------------------------
+library(tidyverse)
+library(phyloseq)
+library(microbiome)
+library(ggpubr)
+library(labdsv) #for indicator analysis
+require(gdata)
+library(scales)
+library(patchwork)
+library(DT)
+library(cowplot)
+library(plyr)
+library(data.table)
+library(pairwiseAdonis)
+library(ggpubr)
+library(GUniFrac)
+library(ade4)
+library(ape)
+library(vegan)
+library(hilldiv)
+library(GUniFrac)
+library(pairwiseAdonis)
+options(scipen=999)
+knitr::opts_chunk$set(echo = TRUE)
+
+
+##----master_load, include=FALSE------------------------------------------------
+remove(list = ls())
+#This can only be used AFTER the workflow is finished.
+#Load the output to run all of the inline code, etc
+#!!! MUST CLEAR MEMORY!!!
+##ls.str(ex)
+load("rdata/p5/bocasbiome_p5_whole.rdata")
+
+
+##---- eval=TRUE, include=FALSE-------------------------------------------------
+levels(sampledf$Zone)
+levels(sampledf$Position)
+levels(sampledf$Reef_type)
+levels(sampledf$Reef)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+ps.whole <- readRDS("rdata/p3/ps_16S_bocas_fish_final.rds")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+type.jaccard <- phyloseq::distance(ps.whole, method = "jaccard", binary = T)
+sampledf <- data.frame(sample_data(ps.whole))
+
+
+##---- eval=FALSE---------------------------------------------------------------
+ps.whole.inner <- subset_samples(ps.whole, Zone != "Outer bay")
+type.jaccard.inner <- phyloseq::distance(ps.whole.inner,
+                                         method = "jaccard", binary = T)
+sampledf.inner <- data.frame(sample_data(ps.whole.inner))
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.jaccard1 <- betadisper(type.jaccard, sampledf$Zone,
+                            type = "centroid", bias.adjust = TRUE)
+permutest(beta.jaccard1, binary = TRUE, pairwise = TRUE,
+          permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.jaccard2 <- betadisper(type.jaccard, sampledf$Position,
+                            type = "centroid", bias.adjust = TRUE)
+permutest(beta.jaccard2, binary = TRUE, pairwise = TRUE,
+          permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.jaccard3 <- betadisper(type.jaccard.inner, sampledf.inner$Reef_type,
+                            type = "centroid", bias.adjust = TRUE)
+permutest(beta.jaccard3, binary = TRUE, pairwise = TRUE,
+          permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.jaccard0 <- adonis(type.jaccard ~ Zone, data = sampledf,
+                          permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.jaccardR <- adonis(type.jaccard ~ Reef, data = sampledf,
+                          permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.jaccard1<- adonis(type.jaccard ~ Zone/Reef, data = sampledf,
+                         permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.jaccard2 <- adonis(type.jaccard ~ Position/Reef, data = sampledf,
+                          permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.jaccard3 <- adonis(type.jaccard.inner ~ Reef_type/Reef,
+                          data = sampledf.inner, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+pairwise1 <- pairwise.adonis(type.jaccard, factors = sampledf$Zone)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+pairwise2 <- pairwise.adonis(type.jaccard, factors = sampledf$Reef)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+data.log10<- microbiome::transform(ps.whole, transform = "log10p")
+sampledf.log10 <- data.frame(sample_data(data.log10))
+type.modGower <- phyloseq::distance(data.log10, method = "altGower")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.Gower1 <- betadisper(type.modGower, sampledf.log10$Zone,
+                          type = "centroid", bias.adjust = TRUE)
+permutest(beta.Gower1, pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.GowerR <- betadisper(type.modGower, sampledf.log10$Reef,
+                          type = "centroid", bias.adjust = TRUE)
+permutest(beta.GowerR, pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.Gower2 <- betadisper(type.modGower, sampledf.log10$Position,
+                          type = "centroid", bias.adjust = TRUE)
+permutest(beta.Gower2, pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+data.log10.inner <- subset_samples(data.log10, Zone != "Outer bay")
+type.modGower.inner <- phyloseq::distance(data.log10.inner, method = "altGower")
+sampledf.inner <- data.frame(sample_data(data.log10.inner))
+beta.Gower3 <- betadisper(type.modGower.inner, sampledf.inner$Reef_type,
+                          type = "centroid", bias.adjust = TRUE)
+permutest(beta.Gower3, binary = TRUE, pairwise = TRUE,
+          permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+adonis.modGower0 <- adonis(type.modGower ~ Zone, data = sampledf.log10,
+                           permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.modGowerR <- adonis(type.modGower ~ Reef, data = sampledf.log10,
+                           permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.modGower1 <- adonis(type.modGower ~ Zone/Reef, data = sampledf.log10,
+                           permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.modGower2 <- adonis(type.modGower ~ Position/Reef, data = sampledf.log10,
+                           permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+data.log10.inner <- subset_samples(data.log10, Zone != "Outer bay")
+type.modGower.inner <- phyloseq::distance(data.log10.inner, method = "altGower")
+sampledf.inner.log10 <- data.frame(sample_data(data.log10.inner))
+adonis.modGower3 <- adonis(type.modGower.inner ~ Reef_type/Reef,
+                           data = sampledf.inner.log10, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+pairwise.adonis(type.modGower, factors = sampledf$Zone)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+pairwise.adonis(type.modGower, factors = sampledf$Reef)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+type.bray <- phyloseq::distance(ps.whole, method = "bray")
+sampledf <- data.frame(sample_data(ps.whole))
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.bray1 <- betadisper(type.bray, sampledf$Zone,
+                         type = "centroid", bias.adjust = TRUE)
+permutest(beta.bray1, pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.brayR <- betadisper(type.bray, sampledf$Reef,
+                         type = "centroid", bias.adjust = TRUE)
+permutest(beta.brayR, pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.bray2 <- betadisper(type.bray, sampledf$Position,
+                         type = "centroid", bias.adjust = TRUE)
+permutest(beta.bray2, pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+ps.whole.inner <- subset_samples(ps.whole, Zone != "Outer bay")
+type.bray.inner <- phyloseq::distance(ps.whole.inner, method = "bray")
+beta.bray3 <- betadisper(type.bray.inner, sampledf.inner$Reef_type,
+                         type = "centroid", bias.adjust = TRUE)
+permutest(beta.bray3, pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+adonis.bray0 <- adonis(type.bray ~ Zone, data = sampledf,
+                            permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.brayR <- adonis(type.bray ~ Reef, data = sampledf,
+                               permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.bray1 <- adonis(type.bray ~ Zone/Reef, data = sampledf,
+                            permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.bray2 <- adonis(type.bray ~ Position/Reef, data = sampledf,
+                            permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+ps.whole.inner <- subset_samples(ps.whole, Zone != "Outer bay")
+type.bray.inner <- phyloseq::distance(ps.whole.inner, method = "bray")
+sampledf.inner <- data.frame(sample_data(ps.whole.inner))
+adonis.bray3 <- adonis(type.bray.inner ~ Reef_type/Reef, data = sampledf.inner,
+                           permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+pairwise.adonis(type.bray, factors = sampledf$Zone)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+pairwise.adonis(type.bray, factors = sampledf$Reef)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+type.unifrac <- phyloseq::distance(ps.whole, method = "unifrac", weighted = F)
+sampledf <- data.frame(sample_data(ps.whole))
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.unifrac1 <- betadisper(type.unifrac, sampledf$Zone,
+                            type = "centroid", bias.adjust = TRUE)
+permutest(beta.unifrac1, pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.unifracR <- betadisper(type.unifrac, sampledf$Reef,
+                            type = "centroid", bias.adjust = TRUE)
+permutest(beta.unifracR, pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.unifrac2 <- betadisper(type.unifrac, sampledf$Position,
+                            type = "centroid", bias.adjust = TRUE)
+permutest(beta.unifrac2, pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+ps.whole.inner <- subset_samples(ps.whole, Zone != "Outer bay")
+type.unifrac.inner <- phyloseq::distance(ps.whole.inner, method = "unifrac")
+sampledf.whole.inner <- data.frame(sample_data(ps.whole.inner))
+beta.unifrac3 <- betadisper(type.unifrac.inner, sampledf.whole.inner$Reef_type,
+                            type = "centroid", bias.adjust = TRUE)
+permutest(beta.unifrac3, pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+adonis.unifrac0 <- adonis(type.unifrac ~ Zone, data = sampledf,
+                               permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.unifracR <- adonis(type.unifrac ~ Reef, data = sampledf,
+                                  permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.unifrac1 <- adonis(type.unifrac ~ Zone/Reef, data = sampledf,
+                             permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.unifrac2 <- adonis(type.unifrac ~ Position/Reef, data = sampledf,
+                               permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+ps.whole.inner <- subset_samples(ps.whole, Zone != "Outer bay")
+type.unifrac.inner <- phyloseq::distance(ps.whole.inner, method = "unifrac")
+sampledf.inner <- data.frame(sample_data(ps.whole.inner))
+
+adonis.unifrac3 <- adonis(type.unifrac.inner ~ Reef_type/Reef,
+                          data = sampledf.inner, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+pairwise.adonis(type.unifrac, factors = sampledf$Zone)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+pairwise.adonis(type.unifrac, factors = sampledf$Reef)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+asv.tab<-otu_table(ps.whole)
+ps.whole.inner <- subset_samples(ps.whole, Zone != "Outer bay")
+asv.tab.inner <- otu_table(ps.whole.inner)
+
+tree.fish<-phy_tree(ps.whole)
+tree.fish.inner<-phy_tree(ps.whole.inner)
+
+fish.sample<-sample_data(ps.whole)
+fish.sample.inner<-sample_data(ps.whole.inner)
+
+groups2.whole <- fish.sample$Zone
+groupsR.whole <- fish.sample$Reef
+groups.inner <- fish.sample.inner$Zone
+position.whole <- fish.sample$Position
+
+
+##---- eval=FALSE---------------------------------------------------------------
+unifracs <- GUniFrac(asv.tab, tree.fish,
+                     alpha=c(0, 0.5, 1))$unifracs
+unifracs.inner <- GUniFrac(asv.tab.inner, tree.fish.inner,
+                           alpha=c(0, 0.5, 1))$unifracs
+
+d5.all <- unifracs[, , "d_0.5"]
+d5.inner <- unifracs.inner[, , "d_0.5"]
+type.gunifrac <- as.dist(d5.all)
+type.gunifrac.inner <- as.dist(d5.inner)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+beta.gunifrac1 <- betadisper(as.dist(d5.all), groups2.whole,
+                             type = "centroid", bias.adjust = TRUE)
+permutest(beta.gunifrac1, pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.gunifracR <- betadisper(as.dist(d5.all), groupsR.whole,
+                             type = "centroid", bias.adjust = TRUE)
+permutest(beta.gunifracR, pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.gunifrac2 <- betadisper(as.dist(d5.all), position.whole,
+                             type = "centroid", bias.adjust = TRUE)
+permutest(beta.gunifrac2, pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.gunifrac.inner <- betadisper(as.dist(d5.inner), groups.inner,
+                                  type = "centroid", bias.adjust = TRUE)
+permutest(beta.gunifrac.inner, pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+sampledf <- data.frame(sample_data(ps.whole))
+sampledf.inner <- data.frame(sample_data(ps.whole.inner))
+adonis.gunifrac1<- adonis(type.gunifrac ~ Zone/Reef, data = sampledf,
+                           permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.gunifrac2<- adonis(type.gunifrac ~ Position/Reef, data = sampledf,
+                                    permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.gunifrac3<- adonis(type.gunifrac.inner ~ Reef_type/Reef,
+                          data = sampledf.whole.inner, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+pairwise.adonis(type.gunifrac, factors = sampledf$Zone,
+                p.adjust.m = "bonferroni")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+pairwise.adonis(type.gunifrac, factors = sampledf$Reef,
+                p.adjust.m = "bonferroni")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+type.wunifrac <- phyloseq::distance(ps.whole, method = "wunifrac")
+sampledf <- data.frame(sample_data(ps.whole))
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.wunifrac1 <- betadisper(type.wunifrac, sampledf$Zone,
+                             type = "centroid", bias.adjust = TRUE)
+permutest(beta.wunifrac1, pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.wunifracR <- betadisper(type.wunifrac, sampledf$Reef,
+                             type = "centroid", bias.adjust = TRUE)
+permutest(beta.wunifracR, pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.wunifrac2 <- betadisper(type.wunifrac, sampledf$Position,
+                             type = "centroid", bias.adjust = TRUE)
+permutest(beta.wunifrac2, pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+ps.whole.inner <- subset_samples(ps.whole, Zone != "Outer bay")
+type.wunifrac.inner <- phyloseq::distance(ps.whole.inner, method = "wunifrac")
+sampledf.inner <- data.frame(sample_data(ps.whole.inner))
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.wunifrac3 <- betadisper(type.wunifrac.inner, sampledf.inner$Reef_type,
+                             type = "centroid", bias.adjust = TRUE)
+permutest(beta.wunifrac3, pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+adonis.wunifrac0 <- adonis(type.wunifrac ~ Zone, data = sampledf,
+                                permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.wunifracR <- adonis(type.wunifrac ~ Reef, data = sampledf,
+                                permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.wunifrac1 <- adonis(type.wunifrac ~ Zone/Reef, data = sampledf,
+                                permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.wunifrac2 <- adonis(type.wunifrac ~ Position/Reef, data = sampledf,
+                                permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+pairwise.adonis(type.wunifrac, factors = sampledf$Zone)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+pairwise.adonis(type.wunifrac, factors = sampledf$Reef)
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+df1 <- data.frame(Distance_to_centroid=beta.jaccard1$distances,
+                  Zone=beta.jaccard1$group)
+df1$Metric <- "Jaccard"
+df1 <- cbind(df1, sampledf)
+df1[, c(4:8, 10:14)] <- NULL
+df1 <- df1 %>% tibble::rownames_to_column("Sample_ID")
+
+df2 <- data.frame(Distance_to_centroid=beta.Gower1$distances,
+                  Zone = beta.Gower1$group)
+df2$Metric <- "Modified Gower"
+df2 <- cbind(df2, sampledf)
+df2[, c(4:8, 10:14)] <- NULL
+df2 <- df2 %>% tibble::rownames_to_column("Sample_ID")
+
+df3 <- data.frame(Distance_to_centroid=beta.bray1$distances,
+                  Zone = beta.bray1$group)
+df3$Metric <- "Bray Curtis"
+df3 <- cbind(df3, sampledf)
+df3[, c(4:8, 10:14)] <- NULL
+df3 <- df3 %>% tibble::rownames_to_column("Sample_ID")
+
+df4 <- data.frame(Distance_to_centroid=beta.unifrac1$distances,
+                  Zone = beta.unifrac1$group)
+df4$Metric <- "Unifrac"
+df4 <- cbind(df4, sampledf)
+df4[, c(4:8, 10:14)] <- NULL
+df4 <- df4 %>% tibble::rownames_to_column("Sample_ID")
+
+df5 <- data.frame(Distance_to_centroid=beta.gunifrac1$distances,
+                  Zone = beta.gunifrac1$group)
+df5$Metric <- "Generalized Unifrac"
+df5 <- cbind(df5, sampledf)
+df5[, c(4:8, 10:14)] <- NULL
+df5 <- df5 %>% tibble::rownames_to_column("Sample_ID")
+
+df6 <- data.frame(Distance_to_centroid=beta.wunifrac1$distances,
+                  Zone = beta.wunifrac1$group)
+df6$Metric <- "Weighted Unifrac"
+df6 <- cbind(df6, sampledf)
+df6[, c(4:8, 10:14)] <- NULL
+df6 <- df6 %>% tibble::rownames_to_column("Sample_ID")
+
+all.data <- rbind(df1,df2,df3,df4,df5,df6)
+str(all.data)
+write.csv(all.data, file = "tables/p5/boxplot_dispersion_data_whole_jjs.csv",
+          row.names = FALSE)
+
+
+##---- echo=FALSE---------------------------------------------------------------
+datatable(all.data, width = "100%", escape = FALSE,
+          rownames = FALSE, filter = 'top',
+          caption = htmltools::tags$caption(
+            style = 'caption-side: bottom; text-align: left;',
+            'Table: ', htmltools::em('Beta diversity estimates of the whole fish microbiome. Use the buttons to
+            navigate through the table or download a copy.')),
+          elementId = "g2rvw71rqu9pzonn6fam",
+          extensions = 'Buttons', options = list(
+            scrollX = TRUE,
+            dom = 'Blfrtip',
+            buttons = c('copy', 'csv', 'excel'),
+            pageLength = 5,
+            lengthMenu = list(c(5, 10, 50, -1), c("5", "10", "50", "All"))
+            )
+          ) %>%
+  DT::formatStyle(columns = colnames(all.data), fontSize = '80%') %>%
+  DT::formatRound(columns = "Distance_to_centroid", digits = 4)
+
+
+##---- include=FALSE, eval=FALSE------------------------------------------------
+save.image("rdata/p5/bocasbiome_p5_whole.rdata")
+remove(list = ls())
+
+
+##----master_load_core, include=FALSE-------------------------------------------
+remove(list = ls())
+#This can only be used AFTER the workflow is finished.
+#Load the output to run all of the inline code, etc
+#!!! MUST CLEAR MEMORY!!!
+##ls.str(ex)
+load("rdata/p5/bocasbiome_p5_core.rdata")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+ps.core <- readRDS("rdata/p1/ps_indv01_core_fish.rds")
+ps.core
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+type.jaccard <- phyloseq::distance(ps.core, method = "jaccard", binary = T)
+sampledf <- data.frame(sample_data(ps.core))
+
+
+##---- eval=FALSE---------------------------------------------------------------
+ps.core.inner <- subset_samples(ps.core, Zone != "Outer bay")
+type.jaccard.inner <- phyloseq::distance(ps.core.inner,
+                                         method = "jaccard", binary=T)
+sampledf.inner <- data.frame(sample_data(ps.core.inner))
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.jaccard1 <- betadisper(type.jaccard, sampledf$Zone,
+                            type = "centroid", bias.adjust = TRUE)
+permutest(beta.jaccard1, binary = TRUE, pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.jaccard2 <- betadisper(type.jaccard, sampledf$Position,
+                            type = "centroid", bias.adjust = TRUE)
+permutest(beta.jaccard2,  binary = TRUE,  pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.jaccard3 <- betadisper(type.jaccard.inner, sampledf.inner$Reef_type,
+                            type = "centroid", bias.adjust = TRUE)
+permutest(beta.jaccard3,  binary = TRUE,  pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.jaccard0<- adonis(type.jaccard ~ Zone, data = sampledf,
+                         permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.jaccardR<- adonis(type.jaccard ~ Reef, data = sampledf,
+                         permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+#by Zone with Reef nested in Zone
+adonis.jaccard1<- adonis(type.jaccard ~ Zone/Reef, data = sampledf,
+                         permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.jaccard2 <- adonis(type.jaccard ~ Position/Reef, data = sampledf,
+                          permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.jaccard3 <- adonis(type.jaccard.inner ~ Reef_type/Reef,
+                          data = sampledf.inner, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+pairwise1 <- pairwise.adonis(type.jaccard, factors = sampledf$Zone)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+pairwise2 <- pairwise.adonis(type.jaccard, factors = sampledf$Reef)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+data.log10<- microbiome::transform(ps.core, transform = "log10p")
+sampledf.log10 <- data.frame(sample_data(data.log10))
+type.modGower <- phyloseq::distance(data.log10, method = "altGower")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.Gower1 <- betadisper(type.modGower, sampledf.log10$Zone,
+                          type = "centroid", bias.adjust = TRUE)
+permutest(beta.Gower1,  pairwise = TRUE, permutations = 10000)
+
+
+##----eval=FALSE----------------------------------------------------------------
+beta.GowerR <- betadisper(type.modGower, sampledf.log10$Reef,
+                          type = "centroid", bias.adjust = TRUE)
+permutest(beta.GowerR,  pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.Gower2 <- betadisper(type.modGower, sampledf.log10$Position,
+                          type = "centroid", bias.adjust = TRUE)
+permutest(beta.Gower2,  pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+data.log10.inner <- subset_samples(data.log10, Zone != "Outer bay")
+type.modGower.inner <- phyloseq::distance(data.log10.inner,
+                                          method = "altGower")
+sampledf.inner <- data.frame(sample_data(data.log10.inner))
+beta.Gower3 <- betadisper(type.modGower.inner, sampledf.inner$Reef_type,
+                          type = "centroid", bias.adjust = TRUE)
+permutest(beta.Gower3,  binary = TRUE,  pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+adonis.modGower0 <- adonis(type.modGower ~ Zone, data = sampledf.log10,
+                           permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.modGowerR <- adonis(type.modGower ~ Reef, data = sampledf.log10,
+                           permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.modGower1 <- adonis(type.modGower ~ Zone/Reef, data = sampledf.log10,
+                           permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.modGower2 <- adonis(type.modGower ~ Position/Reef, data = sampledf.log10,
+                           permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+data.log10.inner <- subset_samples(data.log10, Zone != "Outer bay")
+type.modGower.inner <- phyloseq::distance(data.log10.inner, method = "altGower")
+sampledf.inner.log10 <- data.frame(sample_data(data.log10.inner))
+adonis.modGower3 <- adonis(type.modGower.inner ~ Reef_type/Reef,
+                           data = sampledf.inner.log10, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+pairwise.adonis(type.modGower, factors = sampledf$Zone)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+pairwise.adonis(type.modGower, factors = sampledf$Reef)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+type.bray <- phyloseq::distance(ps.core, method = "bray")
+sampledf <- data.frame(sample_data(ps.core))
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.bray1 <- betadisper(type.bray, sampledf$Zone,
+                         type = "centroid", bias.adjust = TRUE)
+permutest(beta.bray1,  pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.brayR <- betadisper(type.bray, sampledf$Reef,
+                         type = "centroid", bias.adjust = TRUE)
+permutest(beta.brayR,  pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.bray2 <- betadisper(type.bray, sampledf$Position,
+                         type = "centroid", bias.adjust = TRUE)
+permutest(beta.bray2,  pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+ps.core.inner <- subset_samples(ps.core, Zone != "Outer bay")
+type.bray.inner <- phyloseq::distance(ps.core.inner, method = "bray")
+beta.bray3 <- betadisper(type.bray.inner, sampledf.inner$Reef_type,
+                         type = "centroid", bias.adjust = TRUE)
+permutest(beta.bray3,  pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+adonis.bray0 <- adonis(type.bray ~ Zone, data = sampledf,
+                       permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.brayR <- adonis(type.bray ~ Reef, data = sampledf,
+                       permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.brayR
+adonis.bray1 <- adonis(type.bray ~ Zone/Reef, data = sampledf,
+                       permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.bray2 <- adonis(type.bray ~ Position/Reef, data = sampledf,
+                       permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+ps.core.inner <- subset_samples(ps.core, Zone != "Outer bay")
+type.bray.inner <- phyloseq::distance(ps.core.inner, method = "bray")
+sampledf.inner <- data.frame(sample_data(ps.core.inner))
+adonis.bray3 <- adonis(type.bray.inner ~ Reef_type/Reef, data = sampledf.inner,
+                       permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+pairwise.adonis(type.bray, factors = sampledf$Zone)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+pairwise.adonis(type.bray, factors = sampledf$Reef)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+type.unifrac <- phyloseq::distance(ps.core, method = "unifrac", weighted=F)
+sampledf <- data.frame(sample_data(ps.core))
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.unifrac1 <- betadisper(type.unifrac, sampledf$Zone,
+                            type = "centroid", bias.adjust = TRUE)
+permutest(beta.unifrac1,  pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.unifracR <- betadisper(type.unifrac, sampledf$Reef,
+                            type = "centroid", bias.adjust = TRUE)
+permutest(beta.unifracR,  pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.unifrac2 <- betadisper(type.unifrac, sampledf$Position,
+                            type = "centroid", bias.adjust = TRUE)
+permutest(beta.unifrac2, pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+ps.core.inner <- subset_samples(ps.core, Zone != "Outer bay")
+type.unifrac.inner <- phyloseq::distance(ps.core.inner, method = "unifrac")
+sampledf.core.inner <- data.frame(sample_data(ps.core.inner))
+beta.unifrac3 <- betadisper(type.unifrac.inner, sampledf.core.inner$Reef_type,
+                            type = "centroid", bias.adjust = TRUE)
+permutest(beta.unifrac3,  pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+adonis.unifrac0 <- adonis(type.unifrac ~ Zone, data = sampledf,
+                          permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.unifracR <- adonis(type.unifrac ~ Reef, data = sampledf,
+                          permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.unifrac1 <- adonis(type.unifrac ~ Zone/Reef, data = sampledf,
+                          permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.unifrac2 <- adonis(type.unifrac ~ Position/Reef, data = sampledf,
+                          permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+ps.core.inner <- subset_samples(ps.core, Zone != "Outer bay")
+type.unifrac.inner <- phyloseq::distance(ps.core.inner, method = "unifrac")
+sampledf.inner <- data.frame(sample_data(ps.core.inner))
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.unifrac3 <- adonis(type.unifrac.inner ~ Reef_type/Reef,
+                          data = sampledf.inner,
+                          permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+pairwise.adonis(type.unifrac, factors = sampledf$Zone)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+pairwise.adonis(type.unifrac, factors = sampledf$Reef)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+asv.tab<-otu_table(ps.core)
+ps.core.inner <- subset_samples(ps.core, Zone != "Outer bay")
+asv.tab.inner <- otu_table(ps.core.inner)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+tree.fish.core<-phy_tree(ps.core)
+tree.fish.core.inner<-phy_tree(ps.core.inner)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+fish.sample.core<-sample_data(ps.core)
+fish.sample.core.inner<-sample_data(ps.core.inner)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+groups2.core <- fish.sample.core$Zone
+groupsR.core <- fish.sample.core$Reef
+groups.inner.core <- fish.sample.core.inner$Zone
+position.core <- fish.sample.core$Position
+
+
+##---- eval=FALSE---------------------------------------------------------------
+unifracs <- GUniFrac(asv.tab, tree.fish.core,
+                     alpha=c(0, 0.5, 1))$unifracs
+unifracs2 <- GUniFrac(asv.tab.inner, tree.fish.core.inner,
+                      alpha=c(0, 0.5, 1))$unifracs
+
+
+##---- eval=FALSE---------------------------------------------------------------
+d5.all <- unifracs[, , "d_0.5"]
+d5.inner <- unifracs2[, , "d_0.5"]
+
+
+##---- eval=FALSE---------------------------------------------------------------
+type.gunifrac <- as.dist(d5.all)
+type.gunifrac.inner <- as.dist(d5.inner)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+beta.gunifrac1 <- betadisper(as.dist(d5.all), groups2.core,
+                             type = "centroid", bias.adjust = TRUE)
+permutest(beta.gunifrac1, pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.gunifracR <- betadisper(as.dist(d5.all), groupsR.core,
+                             type = "centroid", bias.adjust = TRUE)
+permutest(beta.gunifracR, pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.gunifrac2 <- betadisper(as.dist(d5.all), position.core,
+                             type = "centroid", bias.adjust = TRUE)
+permutest(beta.gunifrac2, pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.gunifrac.inner <- betadisper(as.dist(d5.inner), groups.inner.core,
+                                  type = "centroid", bias.adjust = TRUE)
+permutest(beta.gunifrac.inner, pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+sampledf <- data.frame(sample_data(ps.core))
+sampledf.inner <- data.frame(sample_data(ps.core.inner))
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.gunifrac0<- adonis(type.gunifrac ~ Zone, data = sampledf,
+                          permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.gunifracR<- adonis(type.gunifrac ~ Zone, data = sampledf,
+                          permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.gunifrac1<- adonis(type.gunifrac ~ Zone/Reef, data = sampledf,
+                          permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.gunifrac2<- adonis(type.gunifrac ~ Position/Reef, data = sampledf,
+                          permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.gunifrac3<- adonis(type.gunifrac.inner ~ Reef_type/Reef,
+                          data = sampledf.core.inner, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+pairwise.adonis(type.gunifrac, factors = sampledf$Zone,
+                p.adjust.m = "bonferroni")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+pairwise.adonis(type.gunifrac, factors = sampledf$Reef,
+                p.adjust.m = "bonferroni")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+type.wunifrac <- phyloseq::distance(ps.core, method = "wunifrac")
+sampledf <- data.frame(sample_data(ps.core))
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.wunifrac1 <- betadisper(type.wunifrac, sampledf$Zone,
+                             type = "centroid", bias.adjust = TRUE)
+permutest(beta.wunifrac1,  pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+ps.core.inner <- subset_samples(ps.core, Zone != "Outer bay")
+type.wunifrac.inner <- phyloseq::distance(ps.core.inner, method = "wunifrac")
+sampledf.inner <- data.frame(sample_data(ps.core.inner))
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.wunifracR <- betadisper(type.wunifrac, sampledf$Reef,
+                             type = "centroid", bias.adjust = TRUE)
+permutest(beta.wunifracR,  pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.wunifrac2 <- betadisper(type.wunifrac, sampledf$Position,
+                             type = "centroid", bias.adjust = TRUE)
+permutest(beta.wunifrac2,  pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+beta.wunifrac3 <- betadisper(type.wunifrac.inner, sampledf.inner$Reef_type,
+                             type = "centroid", bias.adjust = TRUE)
+permutest(beta.wunifrac3,  pairwise = TRUE, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+adonis.wunifrac0 <- adonis(type.wunifrac ~ Zone, data = sampledf,
+                           permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.wunifracR <- adonis(type.wunifrac ~ Reef, data = sampledf,
+                           permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.wunifrac1 <- adonis(type.wunifrac ~ Zone/Reef, data = sampledf,
+                           permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.wunifrac2 <- adonis(type.wunifrac ~ Position/Reef, data = sampledf,
+                           permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+ps.core.inner <- subset_samples(ps.core, Zone != "Outer bay")
+type.wunifrac.inner <- phyloseq::distance(ps.core.inner, method = "wunifrac")
+sampledf.inner <- data.frame(sample_data(ps.core.inner))
+
+
+##---- eval=FALSE---------------------------------------------------------------
+adonis.wunifrac3 <- adonis(type.wunifrac.inner ~ Reef_type/Reef,
+                           data = sampledf.inner, permutations = 10000)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+pairwise.adonis(type.wunifrac, factors = sampledf$Zone)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+pairwise.adonis(type.wunifrac, factors = sampledf$Reef)
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+df1 <- data.frame(Distance_to_centroid=beta.jaccard1$distances,
+                  Zone=beta.jaccard1$group)
+df1$Metric <- "Jaccard"
+df1 <- cbind(df1, sampledf)
+df1[, c(4:8, 10:14)] <- NULL
+df1 <- df1 %>% tibble::rownames_to_column("Sample_ID")
+
+df2 <- data.frame(Distance_to_centroid=beta.Gower1$distances,
+                  Zone=beta.Gower1$group)
+df2$Metric <- "Modified Gower"
+df2 <- cbind(df2, sampledf)
+df2[, c(4:8, 10:14)] <- NULL
+df2 <- df2 %>% tibble::rownames_to_column("Sample_ID")
+
+df3 <- data.frame(Distance_to_centroid=beta.bray1$distances,
+                  Zone=beta.bray1$group)
+df3$Metric <- "Bray Curtis"
+df3 <- cbind(df3, sampledf)
+df3[, c(4:8, 10:14)] <- NULL
+df3 <- df3 %>% tibble::rownames_to_column("Sample_ID")
+
+df4 <- data.frame(Distance_to_centroid=beta.unifrac1$distances,
+                  Zone=beta.unifrac1$group)
+df4$Metric <- "Unifrac"
+df4 <- cbind(df4, sampledf)
+df4[, c(4:8, 10:14)] <- NULL
+df4 <- df4 %>% tibble::rownames_to_column("Sample_ID")
+
+df5 <- data.frame(Distance_to_centroid=beta.gunifrac1$distances,
+                  Zone=beta.gunifrac1$group)
+df5$Metric <- "Generalized Unifrac"
+df5 <- cbind(df5, sampledf)
+df5[, c(4:8, 10:14)] <- NULL
+df5 <- df5 %>% tibble::rownames_to_column("Sample_ID")
+
+df6 <- data.frame(Distance_to_centroid=beta.wunifrac1$distances,
+                  Zone=beta.wunifrac1$group)
+df6$Metric <- "Weighted Unifrac"
+df6 <- cbind(df6, sampledf)
+df6[, c(4:8, 10:14)] <- NULL
+df6 <- df6 %>% tibble::rownames_to_column("Sample_ID")
+
+all.data <- rbind(df1,df2,df3,df4,df5,df6)
+str(all.data)
+write.csv(all.data,
+          file = "tables/p5/boxplot_dispersion_data_core_NEW2_jjs.csv",
+          row.names = FALSE, quote = FALSE)
+
+
+##---- echo=FALSE---------------------------------------------------------------
+datatable(all.data, width = "100%", escape = FALSE,
+          rownames = FALSE, filter = 'top',
+          caption = htmltools::tags$caption(
+            style = 'caption-side: bottom; text-align: left;',
+            'Table: ', htmltools::em('Beta diversity estimates of the
+                                     core fish microbiome. Use the buttons
+                                     to navigate through the table or
+                                     download a copy.')),
+          elementId = "sez1e1nej0qm6k8kgsff",
+          extensions = 'Buttons', options = list(
+            scrollX = TRUE,
+            dom = 'Blfrtip',
+            buttons = c('copy', 'csv', 'excel'),
+            pageLength = 5,
+            lengthMenu = list(c(5, 10, 50, -1), c("5", "10", "50", "All"))
+            )
+          ) %>%
+  DT::formatStyle(columns = colnames(all.data), fontSize = '80%') %>%
+  DT::formatRound(columns = "Distance_to_centroid", digits = 4)
+
+
+##---- include=FALSE, eval=FALSE------------------------------------------------
+save.image("rdata/p5/bocasbiome_p5_core.rdata")
+remove(list = ls())
+
+#############################
+##
+## No 6. Beta Dispersion
+##
+#############################
+
+##----setup, include=FALSE------------------------------------------------------
+library(tidyverse)
+library(phyloseq)
+library(microbiome)
+library(ggpubr)
+library(labdsv) #for indicator analysis
+require(gdata)
+library(scales)
+library(patchwork)
+library(DT)
+library(cowplot)
+library(plyr)
+library(data.table)
+library(pairwiseAdonis)
+library(ggpubr)
+library(GUniFrac)
+library(ade4)
+library(ape)
+library(vegan)
+library(hilldiv)
+library(GUniFrac)
+library(pairwiseAdonis)
+options(scipen=999)
+knitr::opts_chunk$set(echo = TRUE)
+
+
+##----master_load, include=FALSE------------------------------------------------
+remove(list = ls())
+#This can only be used AFTER the workflow is finished.
+#Load the output to run all of the inline code, etc
+#!!! MUST CLEAR MEMORY!!!
+##ls.str(ex)
+load("rdata/p6/bocasbiome_p6.rdata")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+data.all <- read.csv("tables/p5/boxplot_dispersion_data_whole_jjs.csv",
+                   row.names = NULL, header = T, sep = ",")
+data.all.core <- read.csv("tables/p5/boxplot_dispersion_data_core_NEW2_jjs.csv",
+                        row.names = NULL, header = T, sep = ",")
+
+data.all$Reef <- factor(data.all$Reef, levels = c('SCR', 'PPR', 'CCR',
+                                                  'ALR', 'SIS', 'ROL',
+                                                  'RNW', 'PST','PBL'))
+data.all.core$Reef <- factor(data.all.core$Reef, levels = c('SCR', 'PPR',
+                                                            'CCR', 'ALR',
+                                                            'SIS', 'ROL',
+                                                            'RNW', 'PST',
+                                                            'PBL'))
+
+
+##---- eval=FALSE---------------------------------------------------------------
+level_order3 <- c('SCR', 'PPR', 'CCR', 'ALR', 'SIS', 'ROL', 'RNW', 'PST','PBL')
+level_order <- c('Outer bay', 'Inner bay', 'Inner bay disturbed')
+level_order2 <- c('Jaccard', 'Modified Gower', 'Bray Curtis', 'Unifrac',
+                  'Generalized Unifrac', 'Weighted Unifrac')
+
+
+##---- eval=FALSE---------------------------------------------------------------
+disp.pal4 <- c("royalblue4", "royalblue3", "royalblue1",
+               "aquamarine4", "mediumaquamarine", "aquamarine2",
+               "chocolate3", "chocolate2", "sienna1")
+disp.pal5 <-  c("midnightblue", "royalblue4", "royalblue3","darkslategrey",
+                "aquamarine4", "mediumaquamarine", "chocolate4", "sienna",
+                "chocolate3")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+font_theme = theme(
+        axis.title.x = element_text(size = 14),
+        axis.text.x = element_text(size = 10),
+        axis.title.y = element_text(size = 14),
+        axis.text.y = element_text(size = 8))
+
+
+##---- eval=FALSE---------------------------------------------------------------
+fig4A <-
+        ggplot(data = data.all, aes(x = factor(Zone, level = level_order),
+                                    y=Distance_to_centroid))+
+        stat_boxplot(aes(colour=Reef), geom ='errorbar', alpha=1) +
+        geom_boxplot(aes(fill=Reef, colour=Reef), alpha=1,
+                     outlier.alpha = 0.7, outlier.shape = 16)+
+        scale_colour_manual(values=disp.pal5)+
+        scale_fill_manual(values=disp.pal4)+
+        ggtitle("Multivariate Dispersion", subtitle="Whole microbiome")+
+        theme(plot.title=element_text(size=18, face="bold"))+
+        theme(plot.subtitle=element_text(size=16))+
+        font_theme+
+        stat_summary(aes(fill=Reef), fun="mean", geom="point",
+                     size=2.5, shape=18,
+                     position=position_dodge(width=0.75),
+                     color=c("midnightblue", "royalblue4", "royalblue3",
+                             "darkslategrey", "aquamarine4", "mediumaquamarine",
+                             "chocolate4", "sienna", "chocolate3",
+                             "midnightblue", "royalblue4", "royalblue3",
+                             "darkslategrey", "aquamarine4", "mediumaquamarine",
+                             "chocolate4", "sienna", "chocolate3", "midnightblue",
+                             "royalblue4", "royalblue3","darkslategrey",
+                             "aquamarine4", "mediumaquamarine","chocolate4",
+                             "sienna", "chocolate3", "midnightblue", "royalblue4",
+                             "royalblue3","darkslategrey", "aquamarine4",
+                             "mediumaquamarine","chocolate4", "sienna",
+                             "chocolate3", "midnightblue", "royalblue4",
+                             "royalblue3","darkslategrey", "aquamarine4",
+                             "mediumaquamarine","chocolate4", "sienna",
+                             "chocolate3","midnightblue", "royalblue4",
+                             "royalblue3","darkslategrey", "aquamarine4",
+                             "mediumaquamarine","chocolate4", "sienna",
+                             "chocolate3"), show.legend = FALSE)+
+        scale_x_discrete(name="Zone") +
+        scale_y_continuous(name="Distance to centroid")+
+        facet_wrap(~factor(Metric, levels=unique(Metric)),
+                   scales="free",ncol = 3)+
+        theme(strip.background = element_rect(color="black", fill="white",
+                                              size=1, linetype="blank"),
+              strip.text.x = element_text(size = 14),
+              panel.border = element_rect(fill = NA, color="black"),
+              panel.grid.major = element_blank(),
+              panel.grid.minor = element_blank(),
+              panel.background = element_rect(fill = "white",colour = NA),
+              legend.key = element_rect(fill = "transparent", color = NA),
+              legend.text = element_text(size = 12),
+              legend.title = element_text(size = 14))
+
+fig4A
+
+
+##---- eval=FALSE---------------------------------------------------------------
+fig4B <-
+        ggplot(data = data.all.core, aes(x = factor(Zone, level = level_order),
+                                         y=Distance_to_centroid))+
+        stat_boxplot(aes(colour=Reef), geom ='errorbar', alpha=1) +
+        geom_boxplot(aes(fill=Reef, colour=Reef), alpha=1,
+                     outlier.alpha = 0.7, outlier.shape = 16)+
+        scale_colour_manual(values=disp.pal5)+
+        scale_fill_manual(values=disp.pal4)+
+        ggtitle("", subtitle="Core microbiome")+
+        theme(plot.subtitle=element_text(size=16))+
+        font_theme+
+        stat_summary(aes(fill=Reef), fun="mean", geom="point", size=2.5, shape=18,
+                     position=position_dodge(width=0.75),
+                     color=c("midnightblue", "royalblue4", "royalblue3",
+                             "darkslategrey", "aquamarine4", "mediumaquamarine",
+                             "chocolate4", "sienna", "chocolate3","midnightblue",
+                             "royalblue4", "royalblue3","darkslategrey",
+                             "aquamarine4", "mediumaquamarine","chocolate4",
+                             "sienna", "chocolate3","midnightblue", "royalblue4",
+                             "royalblue3","darkslategrey", "aquamarine4",
+                             "mediumaquamarine","chocolate4", "sienna",
+                             "chocolate3","midnightblue", "royalblue4",
+                             "royalblue3","darkslategrey", "aquamarine4",
+                             "mediumaquamarine","chocolate4", "sienna",
+                             "chocolate3", "midnightblue", "royalblue4",
+                             "royalblue3","darkslategrey", "aquamarine4",
+                             "mediumaquamarine","chocolate4", "sienna",
+                             "chocolate3", "midnightblue", "royalblue4",
+                             "royalblue3","darkslategrey", "aquamarine4",
+                             "mediumaquamarine","chocolate4", "sienna", "chocolate3"),
+                     show.legend = FALSE)+
+        scale_x_discrete(name="Zone") +
+        scale_y_continuous(name = "Distance to centroid") +
+        facet_wrap(~factor(Metric, levels=unique(Metric)),scales = "free", ncol = 3) +
+        theme(strip.background = element_rect(color="black", fill = "white",
+                                              size=1, linetype="blank"),
+              strip.text.x = element_text(size = 14),
+              panel.border = element_rect(fill = NA, color = "black"),
+              panel.grid.major = element_blank(),
+              panel.grid.minor = element_blank(),
+              panel.background = element_rect(fill = "white",colour = NA),
+              legend.key = element_rect(fill = "transparent", color = NA),
+              legend.text = element_text(size = 12),
+              legend.title = element_text(size = 14))
+fig4B
+
+
+##---- echo=FALSE, eval=FALSE---------------------------------------------------
+#Combine the two figures (whole and core) on 1 panel
+library(ggpubr)
+tiff("figures/p6/Boxplot_dispersion_facet_NEWNEW_v2.png", height=50, width=40, units = 'cm', res = 600, bg = "white")
+png("figures/p6/Boxplot_dispersion_facet_NEWNEW_v2.png", height=40, width=30, units = 'cm', res = 600, bg = "white")
+fig <- ggarrange(fig4A,fig4B, ncol=1, common.legend = TRUE, legend="right")
+fig
+pdf("figures/p6/Boxplot_dispersion_facet_NEWNEW_v2.pdf", height = 18, width = 12)
+fig
+dev.off()
+
+
+##---- echo=FALSE, warning=FALSE, fig.height=5, layout='l-page'-----------------
+knitr::include_graphics("figures/p6/Boxplot_dispersion_facet_NEWNEW_v2.png")
+
+
+##---- include=FALSE, eval=FALSE------------------------------------------------
+save.image("rdata/p6/bocasbiome_p6.rdata")
+remove(list = ls())
+
+#############################
+##
+## No 7. PIME Analysis
+##
+#############################
+
+##----setup, include=FALSE------------------------------------------------------
+library(tidyverse)
+library(phyloseq)
+library(microbiome)
+library(ggpubr)
+library(labdsv)
+require(gdata) 
+library(scales)
+library(patchwork)
+library(DT) 
+library(cowplot)
+library(plyr)
+library(data.table)
+library(pairwiseAdonis)
+library(ggpubr)
+library(GUniFrac)
+library(ade4)
+library(ape)
+library(vegan)
+library(hilldiv)
+library(GUniFrac)
+library(pairwiseAdonis)
+library(pime)
+library(randomForest)
+library(knitr)
+
+options(scipen=999)
+knitr::opts_chunk$set(echo = TRUE)
+
+
+##----master_load, include=FALSE------------------------------------------------
+remove(list = ls())
+#This can only be used AFTER the workflow is finished.
+#Load the output to run all of the inline code, etc
+#!!! MUST CLEAR MEMORY!!!
+##ls.str(ex)
+load("rdata/p7/bocasbiome_p7.rdata")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+ps.whole <- readRDS("rdata/p3/ps_16S_bocas_fish_final.rds")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+ps.whole <- phyloseq(otu_table(ps.whole), sample_data(ps.whole), tax_table(ps.whole))
+ps.whole@phy_tree <- NULL
+
+
+##---- echo=FALSE---------------------------------------------------------------
+ps.whole
+
+
+##---- eval=FALSE---------------------------------------------------------------
+pime.oob.error(ps.whole, "Zone")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+data.frame(sample_data(ps.whole))
+per_variable_obj <- pime.split.by.variable(ps.whole, "Zone")
+per_variable_obj
+
+
+##---- echo=FALSE---------------------------------------------------------------
+per_variable_obj
+
+
+##---- eval=FALSE---------------------------------------------------------------
+prevalences <- pime.prevalence(per_variable_obj)
+head(prevalences)
+
+
+##---- echo=FALSE---------------------------------------------------------------
+head(prevalences)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+set.seed(1911)
+best.prev <- pime.best.prevalence(prevalences, "Zone")
+
+
+##---- echo=FALSE---------------------------------------------------------------
+what_is_best <- best.prev$`OOB error`
+what_is_best[, c(2:4)] <- sapply(what_is_best[, c(2:4)], as.numeric)
+what_is_best <- what_is_best %>% dplyr::rename("OOB_error_rate" = "OOB error rate (%)")
+best <- with(what_is_best, Interval[which.min(OOB_error_rate)])
+
+
+##---- eval=FALSE---------------------------------------------------------------
+imp65 <- best.prev$`Importance`$`Prevalence 65`
+write.csv(imp65, file = "tables/p7/output_PIME_Zone65.csv")
+
+
+##---- echo=FALSE, eval=FALSE---------------------------------------------------
+imp65_mod <- imp65
+imp65_mod[, 13:17] <- list(NULL)
+imp65_mod <- imp65_mod %>% dplyr::rename("ASV_ID" = "SequenceID")
+
+
+##---- echo=FALSE, layout='l-body-outset'---------------------------------------
+elementId need to be unique https://www.random.org/strings/
+datatable(imp65_mod, width = "100%", escape = FALSE,
+          rownames = FALSE, filter = 'top',
+          caption = htmltools::tags$caption(
+            style = 'caption-side: bottom; text-align: left;',
+            'Table: ', htmltools::em('Table of ASV from the chosen prevalence interval.')),
+          elementId = "w0vzbq4nx3jp1t81ntvw",
+          extensions = 'Buttons', options = list(
+            scrollX = TRUE,
+            dom = 'Blfrtip',
+            buttons = c('copy', 'csv', 'excel'),
+            pageLength = 5,
+            lengthMenu = list(c(5, 10, -1), c("5", "10", "All"))
+            )
+          ) %>%
+  DT::formatStyle(columns = colnames(imp65_mod), fontSize = '80%') %>%
+  DT::formatRound(columns = c("Inner.bay", "Inner.bay.disturbed",
+                              "Outer.bay", "MeanDecreaseAccuracy",
+                              "MeanDecreaseGini" ), digits = 4)
+
+
+##---- eval=FALSE---------------------------------------------------------------
+prevalence.65 <- prevalences$`65`
+summarize_phyloseq(prevalence.65)
+saveRDS(prevalence.65, "rdata/p7/Pime_Prevalence_65.rds")
+
+
+##---- echo=FALSE---------------------------------------------------------------
+prevalence.65
+
+
+##---- echo=FALSE---------------------------------------------------------------
+min_read_ps <- min(readcount(prevalence.65))
+max_read_ps <- max(readcount(prevalence.65))
+total_reads_ps <- sum(readcount(prevalence.65))
+mean_reads_ps <- round(mean(readcount(prevalence.65)), digits = 0)
+median_reads_ps <- median(readcount(prevalence.65))
+total_asvs_ps <- ntaxa(prevalence.65)
+singleton_ps <- tryCatch(ntaxa(rare(prevalence.65,
+                                    detection = 1, prevalence = 0)),
+                         error=function(err) NA)
+singleton_ps_perc <- tryCatch(round((100*(ntaxa(rare(prevalence.65,
+                                                     detection = 1,
+                                                     prevalence = 0)) / ntaxa(ps))),
+                                    digits = 3),
+                              error=function(err) NA)
+sparsity_ps <- round(length(which(
+  abundances(prevalence.65) == 0))/length(abundances(prevalence.65)),
+  digits = 3)
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+save.image("rdata/p7/checkpoint1.rdata")
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+load("rdata/p7/checkpoint1.rdata")
+
+
+##---- eval=FALSE---------------------------------------------------------------
+randomized <- pime.error.prediction(ps.whole, "Zone", bootstrap = 100,
+                                    parallel = TRUE, max.prev = 95)
+
+
+##---- echo=FALSE, eval=FALSE---------------------------------------------------
+oob_error <- randomized$`Results table`
+
+
+##---- echo=FALSE, layout='l-page'----------------------------------------------
+datatable(oob_error, width = "100%", escape = FALSE,
+          rownames = FALSE, filter = 'top',
+          caption = htmltools::tags$caption(
+            style = 'caption-side: bottom; text-align: left;',
+            'Table: ', htmltools::em('Table of ASV from the chosen prevalence interval.')),
+          elementId = "x4rm71xhgtrgjnoldisj",
+          extensions = 'Buttons', options = list(
+            scrollX = TRUE,
+            dom = 'Blfrtip',
+            buttons = c('copy', 'csv', 'excel'),
+            pageLength = 5,
+            lengthMenu = list(c(5, 10, -1), c("5", "10", "All"))
+            )
+          ) %>%
+  DT::formatStyle(columns = colnames(oob_error), fontSize = '80%') %>%
+  DT::formatRound(columns = 1:20, digits = 4)
+
+
+##---- echo=FALSE---------------------------------------------------------------
+randomized$Plot
+
+
+##---- eval=FALSE---------------------------------------------------------------
+replicated.oob.error <- pime.oob.replicate(prevalences, "Zone",
+                                         bootstrap = 100, parallel = TRUE)
+
+
+##---- echo=FALSE---------------------------------------------------------------
+replicated.oob.error$Plot
+
+
+##------------------------------------------------------------------------------
+best.prev$Confusion$`Prevalence 65`
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+PIME_preval.65_tax <- tax_table(prevalence.65)
+write.csv(PIME_preval.65_tax, file="tables/p7/PIME_tax_table.csv")
+
+PIME_preval.65_ASV <- otu_table(prevalence.65)
+write.csv(PIME_preval.65_ASV, file="tables/p7/PIME_otu_table.csv")
+
+PIME_preval.65_SAM <- sample_data(prevalence.65)
+write.csv(PIME_preval.65_SAM, file="tables/p7/PIME_sample_data.csv")
+
+
+##---- echo=FALSE, eval=FALSE---------------------------------------------------
+pime_asv_tab <- data.frame(PIME_preval.65_ASV)
+pime_asv_tab <- pime_asv_tab %>% tibble::rownames_to_column("Sample_ID")
+
+
+##---- echo=FALSE, layout='l-page'----------------------------------------------
+elementId need to be unique https://www.random.org/strings/
+datatable(pime_asv_tab, width = "100%", escape = FALSE,
+          rownames = FALSE, filter = 'top',
+          caption = htmltools::tags$caption(
+            style = 'caption-side: bottom; text-align: left;',
+            'Table: ', htmltools::em('ASV abundance across samples.')),
+          elementId = "qbbqe2d87hjyk4w3jlyf",
+          extensions = 'Buttons', options = list(
+            scrollX = TRUE,
+            dom = 'Blfrtip',
+            buttons = c('copy', 'csv', 'excel'),
+            pageLength = 5,
+            lengthMenu = list(c(5, 25, -1), c("5", "10", "All"))
+            )
+          ) %>%
+  DT::formatStyle(columns = colnames(pime_asv_tab), fontSize = '80%')
+
+
+##---- eval=FALSE---------------------------------------------------------------
+per_zone = pime.split.by.variable(prevalence.65, "Zone")
+per_zone
+
+
+##---- echo=FALSE---------------------------------------------------------------
+per_zone
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+##JJ# say not run, names already fixed
+#prevalence.65 <- readRDS("Pime_Prevalence_65.rds")
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+##JJ# say not run, names already fixed
+##manually modified ASV IDs in tax table for plotting
+#tax.new <- read.csv("tables/p7/tax_table_PIME65.csv",
+#                    row.names = 1, header = T, sep = ",")
+#tax.matrix <- as.matrix(tax.new)
+##compile new phyloseq object with modified tax table
+#prevalence.65.mod <- merge_phyloseq(otu_table(prevalence.65),
+#                                    tax_table(tax.matrix),
+#                                    sample_data(prevalence.65))
+#tax_table(prevalence.65)
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+Zone_ASV <- prevalence.65 %>%
+        tax_glom(taxrank = "ASV_IDb") %>%
+        transform_sample_counts(function(x) {x/sum(x)} ) %>%
+        psmelt() %>%
+        arrange(ASV_IDb)
+level_order <- c('Outer bay', 'Inner bay', 'Inner bay disturbed')
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+ASV_colors_65 <- c(
+        "mediumaquamarine","snow2", "darkseagreen2","pink3", "lightsalmon",
+        "lightgoldenrod3","lightsalmon2","plum1","darkolivegreen1","skyblue",
+        "powderblue", "aquamarine", "darkseagreen", "lavenderblush3",
+        "mediumturquoise","seagreen", "mistyrose")
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+fig00 <-
+        ggplot(Zone_ASV, aes(x = factor(Zone, level = level_order),
+                             y = Abundance, fill = ASV_IDb)) +
+        geom_bar(stat = "identity", position = "fill") +
+        scale_fill_manual(values = ASV_colors_65) +
+        scale_x_discrete("Reef", expand = waiver(), position = "bottom",
+                         drop = FALSE) +
+        theme(axis.title.x = element_blank()) +
+        guides(fill = guide_legend(reverse = TRUE,
+                                   keywidth = 1,
+                                   keyheight = 1,
+                                   title = "ASV ID")) +
+        ylab("Relative Abundance (ASV) \n") +
+        ggtitle("PIME Filtering Zones \n 65% Prevalence") +
+        theme(panel.grid.major = element_blank(),
+              panel.grid.minor = element_blank(),
+              panel.background = element_rect(fill = "transparent", colour = NA),
+              plot.background = element_rect(fill = "white",colour = NA),
+              legend.key = element_rect(fill = "transparent", color = NA),
+              panel.border = element_rect(fill = NA, color="black"))
+fig00
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+pdf("figures/p7/Barchart_PIME_65_ASV.pdf", width = 16, height = 10)
+fig00
+invisible(dev.off())
+
+
+##---- echo=FALSE, warning=FALSE, fig.height=4, layout='l-page'-----------------
+fig00_disp <- fig00
+fig00_disp <- fig00_disp + ggtitle("PIME Filtering Zones", subtitle = "65% Prevalence") +
+  theme(axis.title.x = element_text(size = 10),
+        axis.text.x = element_text(size = 8),
+        axis.title.y = element_text(size = 10),
+        axis.text.y = element_text(size = 8),
+        legend.text = element_text(size = 8),
+        plot.title = element_text(size = 12)) +
+  guides(fill = guide_legend(reverse = FALSE,
+                             keywidth = 0.7,
+                             keyheight = 0.7,
+                             title = "ASV ID"))
+fig00_disp
+
+
+##---- eval=FALSE, echo=FALSE---------------------------------------------------
+save.image("rdata/p7/bocasbiome_p7.rdata")
+
