@@ -1,7 +1,7 @@
 ---
 title: "No 6. Beta Dispersion"
 description: |
-  This script generates faceted boxplot of beta dispersion for all six alpha diversity metrics from the whole & core fish gut microbiomes.
+  This script generates faceted boxplot of beta dispersion for all six beta diversity metrics from the whole & core fish gut microbiomes.
 author:
 #  - name: "Jarrod J Scott"
 #    url: https://github.com/jjallaire
