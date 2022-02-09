@@ -7,31 +7,35 @@ description: |
 output_dir: "public_build"
 exclude: ["rdata", "public", "public_build", "tables", "working"]
 creative_commons: CC BY
-#favicon: assets/favicon.ico
+favicon: assets/favicon.ico
 navbar:
-  logo:
-    image: assets/icon.png
+  #logo:
+    #image: assets/icon.png
     #text: "bocasbiome"
-    href: index.html
+    #href: index.html
   source_url: false
-  search: true
+  search: false
   left:
+    - text: "Home"
     - icon: fa-home
       href: index.html
-    - text: "1. Indicator Analysis"
-      href: wf1.html
-    - text: "2. Taxa by Sample Fraction"
-      href: wf2.html
-    - text: "3. Subset Fish"
-      href: wf3.html
-    - text: "4. Alpha Diversity"
-      href: wf4.html
-    - text: "5. Beta Diversity"
-      href: wf5.html
-    - text: "6. Beta Dispersion"
-      href: wf6.html
-    - text: "7. PIME Analysis"
-      href: wf7.html
+  right:
+    - text: "Workflows"
+      menu:
+        - text: "1. Indicator Analysis"
+          href: wf1.html
+        - text: "2. Taxa by Sample Fraction"
+          href: wf2.html
+        - text: "3. Subset Fish"
+          href: wf3.html
+        - text: "4. Alpha Diversity"
+          href: wf4.html
+        - text: "5. Beta Diversity"
+          href: wf5.html
+        - text: "6. Beta Dispersion"
+          href: wf6.html
+        - text: "7. PIME Analysis"
+          href: wf7.html
     - icon: fa-github fa-lg
       href: https://github.com/bocasbiome/web/
 output:

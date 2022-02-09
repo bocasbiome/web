@@ -112,7 +112,7 @@ This site provides reproducible workflows for the study on the gut microbiome of
 
 ## Credits {.appendix}
 
-The banner photo, entitled **Butterfly-fish, *Chaetodon capistratus* Linnaeus**, by [David Starr Jordan](https://en.wikipedia.org/wiki/en:David_Starr_Jordan) (1851–1931) was retreived from Wikimedia Commons ([original](https://upload.wikimedia.org/wikipedia/commons/b/b4/FMIB_52079_Butterfly-fish%2C_Chaetodon_capistratus_Linnaeus_Jamaica.jpeg)) and licenced under [CC-0](https://creativecommons.org/share-your-work/public-domain/cc0). The image is part of the [Freshwater and Marine Image Bank](https://content.lib.washington.edu/fishweb/index.html) at the University of Washington. 
+The banner photo, entitled **Butterfly-fish, *Chaetodon capistratus* Linnaeus**,  was retrieved from Wikimedia Commons and licensed under [CC-0](https://creativecommons.org/share-your-work/public-domain/cc0). The image is part of the [Freshwater and Marine Image Bank](https://content.lib.washington.edu/fishweb/index.html) at the University of Washington. 
 
 ## Acknowledgements {.appendix}
 
@@ -120,7 +120,7 @@ We thank Lucia Rodriguez for field assistance, Joan Antaneda for her help in the
 
 ## Author Contributions {.appendix}
 
-FC, ML, and JJS conceived the study. ML, FC, and RFP designed the study with input from AHA. FC, ML, and JJS conducted the fieldwork. ECRG and FC dissected the fish guts. FC extracted the DNA. JS and ML prepared the DNA for sequencing and processed the sequencing data. RFP, AHA, WOM, and ML contributed reagents and supplies. ECRG analysed the photographic benthic quadrats. FC, JS, and ML analysed the data and wrote the first draft of the manuscript with input from RFP and LGEW. All authors reviewed the manuscript and contributed to the final version. JJS and FC created the site.
+FC, ML, and JJS conceived the study. ML, FC, and RFP designed the study with input from AHA. FC, ML, and JJS conducted the fieldwork. ECRG and FC dissected the fish guts. FC extracted the DNA. JS and ML prepared the DNA for sequencing and processed the sequencing data. RFP, AHA, WOM, and ML contributed reagents and supplies. ECRG analysed the photographic benthic quadrats. FC, JS, and ML analysed the data and wrote the first draft of the manuscript with input from RFP and LGEW. All authors reviewed the manuscript and contributed to the final version. JJS and FC created the website.
 
 ## Data Availability {.appendix}
 
