@@ -1,7 +1,7 @@
 ---
 title: "Reproducible workflows for the study:"
 description: |
-  *The gut microbiome stability of a butterflyfish is disrupted on severely degraded Caribbean reef habitats*.
+  *The gut microbiome variability of a butterflyfish increases on severely degraded Caribbean reefs*.
 author:
   - name: Friederike Clever
     orcid_id: 0000-0003-3434-6125
@@ -64,6 +64,45 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
 ```
+
+<script type="text/javascript" src="https://d1bxh8uas1mnw7.cloudfront.net/assets/embed.js"></script>
+<script async src="https://badge.dimensions.ai/badge.js" charset="utf-8"></script>
+
+<div class="pub_float">
+  <div class="__dimensions_badge_embed__" data-doi="10.1038/s42003-022-03679-0" data-hide-zero-citations="false" data-legend="hover-bottom" data-style="small_circle"></div>
+  <div class="altmetric-embed" data-badge-type="donut" data-doi="10.1038/s42003-022-03679-0" data-altmetric-id="133374281"></div>
+  <span class="pub-title"><a href=" https://doi.org/10.1038/s42003-022-03679-0" target="_new">The gut microbiome variability of a butterflyfish increases on severely degraded Caribbean reefs</a></span>
+  <span class="pub-authors">Clever F<sup>☯</sup>, Sourisse JM<sup>☯</sup>, Preziosi RF, Eisen JA, Guerra ECR, Scott JJ, Wilkins LGE, Altieri AH, McMillan WO, Leray M. </span>
+  <span class="pub-co-first-authors"><sup>☯</sup>Co-first authors</span>
+<div class="pub-info">
+<div class="pub-featured-image">
+  <a href="assets/main_figs.png">
+    <img src="assets/main_figs.png" style="max-width: 100px; max-height: 400px; width: auto; border: none; height: auto; margin: 0 auto; display: block; transform: translateY(10%);" />
+  </a>
+</div>
+<div class="pub-highlights">
+  <span style="display: inline-block; padding-bottom: 5px;"
+  >- Environmental degradation may alter key mutualisms underlying structure and function of ecological communities.</span><br><span style="display: inline-block; padding-bottom: 5px;"
+  >- How do microbial communities associated with fishes vary across populations in relation to habitat characteristics?</span><br><span style="display: inline-block; padding-bottom: 5px;"
+  >- Found significant differences in the gut microbiome composition of a facultative coral-feeding butterflyfish (*Chaetodon capistratus*) across reefs that differ in live coral cover. </span><br><span style="display: inline-block; padding-bottom: 5px;"
+  >- Gut microbiomes were significantly more variable at degraded reefs.</span><br><span style="display: inline-block; padding-bottom: 5px;"
+  >- Gut microbiomes on severely degraded reefs had a lower abundance of *Endozoicomonas* and a higher diversity of anaerobic fermentative bacteria.</span><br><span style="display: inline-block; padding-bottom: 5px;"
+  >- Observed that shifts in gut bacterial communities across the habitat gradient extend to a small set of potentially beneficial host associated bacteria suggesting essential fish-microbiome interactions may be vulnerable to severe coral degradation.</span>
+</div>
+  </div>
+  <span class="pub-journal">
+    <b>Communications Biology 5 (2022)</b>
+    <a href="https://doi.org/10.1038/s42003-022-03679-0" target="_blank">🔗</a>
+  </span>
+</div>
+
+<small><em>Code for the highlight box above shamelessly stolen from the [Meren Lab website](https://merenlab.org/).</em></small>
+
+
+> [Click here](https://www.nature.com/articles/s42003-022-03679-0/metrics) for article metrics on the  Communications Biology website. 
+
+<br/>
+
 
 
 This site provides reproducible workflows for the study on the gut microbiome of Caribbean butterflyfish. If you want to follow the workflow step-by-step, please use the navigation bar above or the section below, where scripts are presented in order. If you would instead like to jump to specific analyses, please select an area on the **clickable image map** to go directly to that section.
